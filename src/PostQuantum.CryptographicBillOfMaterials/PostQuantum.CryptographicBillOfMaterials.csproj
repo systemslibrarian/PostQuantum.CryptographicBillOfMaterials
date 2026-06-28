@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>PostQuantum.CryptographicBillOfMaterials</RootNamespace>
+    <AssemblyName>PostQuantum.CryptographicBillOfMaterials</AssemblyName>
+    <PackageId>PostQuantum.CryptographicBillOfMaterials</PackageId>
+    <Description>Core domain model, risk-scoring, and PQC knowledge base for the Cryptographic Bill of Materials (CBOM) tooling.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Knowledge\algorithms.json" />
+  </ItemGroup>
+
+</Project>

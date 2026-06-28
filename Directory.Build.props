@@ -1,0 +1,24 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: missing XML doc. Docs are required on shipped public API but we don't
+         block the build while the surface is still being filled in. Re-enable as error in CI. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <!-- Package identity (shared) -->
+    <Authors>systemslibrarian</Authors>
+    <Company>PostQuantum</Company>
+    <Product>PostQuantum.CryptographicBillOfMaterials</Product>
+    <PackageProjectUrl>https://github.com/systemslibrarian/CryptographicBillOfMaterials</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/systemslibrarian/CryptographicBillOfMaterials</RepositoryUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <Copyright>Copyright (c) systemslibrarian</Copyright>
+  </PropertyGroup>
+
+</Project>

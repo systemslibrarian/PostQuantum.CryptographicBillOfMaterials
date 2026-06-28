@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PostQuantum.CryptographicBillOfMaterials.Analysis/PostQuantum.CryptographicBillOfMaterials.Analysis.csproj" />
+    <Project Path="src/PostQuantum.CryptographicBillOfMaterials/PostQuantum.CryptographicBillOfMaterials.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Tests/PostQuantum.CryptographicBillOfMaterials.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+.vs/
+artifacts/
+cbom-out/
+.cbom/out/
+TestResults/
+*.binlog

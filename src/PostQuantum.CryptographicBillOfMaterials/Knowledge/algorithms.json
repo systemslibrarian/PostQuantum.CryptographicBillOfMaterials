@@ -1,0 +1,223 @@
+{
+  "version": "1.0",
+  "algorithms": [
+    {
+      "name": "AES",
+      "primitive": "block-cipher",
+      "defaultKeyBits": 256,
+      "classicalSecurityLevel": 256,
+      "nistQuantumSecurityLevel": 5,
+      "oid": "2.16.840.1.101.3.4.1",
+      "quantumVulnerability": "NotVulnerable",
+      "quantumThreat": "None",
+      "classicalWeakness": "None",
+      "basis": "FIPS 197. Grover at most halves the effective key strength; AES-192/256 retain >=96/128-bit post-quantum security. CNSA 2.0 selects AES-256."
+    },
+    {
+      "name": "3DES",
+      "primitive": "block-cipher",
+      "defaultKeyBits": 168,
+      "classicalSecurityLevel": 112,
+      "nistQuantumSecurityLevel": 1,
+      "oid": "1.2.840.113549.3.7",
+      "quantumVulnerability": "ReducedMargin",
+      "quantumThreat": "Grover",
+      "classicalWeakness": "Deprecated",
+      "basis": "NIST SP 800-131A deprecates Three-Key TDEA and disallows it for encryption after 2023.",
+      "recommendation": {
+        "summary": "Replace 3DES with AES-256-GCM.",
+        "options": [
+          { "description": "AES-256-GCM (authenticated encryption).", "basis": "FIPS 197; NIST SP 800-38D.", "resultingVulnerability": "NotVulnerable" }
+        ]
+      }
+    },
+    {
+      "name": "DES",
+      "primitive": "block-cipher",
+      "defaultKeyBits": 56,
+      "classicalSecurityLevel": 56,
+      "oid": "1.3.14.3.2.7",
+      "quantumVulnerability": "ReducedMargin",
+      "quantumThreat": "Grover",
+      "classicalWeakness": "Broken",
+      "basis": "DES has a 56-bit key broken by exhaustive search; disallowed (NIST SP 800-131A).",
+      "recommendation": {
+        "summary": "Replace DES with AES-256-GCM.",
+        "options": [
+          { "description": "AES-256-GCM (authenticated encryption).", "basis": "FIPS 197; NIST SP 800-38D.", "resultingVulnerability": "NotVulnerable" }
+        ]
+      }
+    },
+    {
+      "name": "RC2",
+      "primitive": "block-cipher",
+      "defaultKeyBits": 64,
+      "classicalSecurityLevel": 64,
+      "quantumVulnerability": "ReducedMargin",
+      "quantumThreat": "Grover",
+      "classicalWeakness": "Broken",
+      "basis": "RC2 is a legacy cipher with known weaknesses and is not approved by NIST.",
+      "recommendation": {
+        "summary": "Replace RC2 with AES-256-GCM.",
+        "options": [
+          { "description": "AES-256-GCM (authenticated encryption).", "basis": "FIPS 197; NIST SP 800-38D.", "resultingVulnerability": "NotVulnerable" }
+        ]
+      }
+    },
+    {
+      "name": "MD5",
+      "primitive": "hash",
+      "classicalSecurityLevel": 0,
+      "oid": "1.2.840.113549.2.5",
+      "quantumVulnerability": "NotVulnerable",
+      "quantumThreat": "None",
+      "classicalWeakness": "Broken",
+      "basis": "MD5 is collision-broken and disallowed for security use (NIST SP 800-131A; RFC 6151).",
+      "recommendation": {
+        "summary": "Replace MD5 with SHA-256 or SHA-384.",
+        "options": [
+          { "description": "SHA-256 / SHA-384 for general hashing.", "basis": "FIPS 180-4.", "resultingVulnerability": "NotVulnerable" }
+        ]
+      }
+    },
+    {
+      "name": "SHA-1",
+      "primitive": "hash",
+      "classicalSecurityLevel": 0,
+      "oid": "1.3.14.3.2.26",
+      "quantumVulnerability": "NotVulnerable",
+      "quantumThreat": "None",
+      "classicalWeakness": "Broken",
+      "basis": "SHA-1 collisions are practical (SHAttered, 2017); disallowed by NIST SP 800-131A.",
+      "recommendation": {
+        "summary": "Replace SHA-1 with SHA-256 or SHA-384.",
+        "options": [
+          { "description": "SHA-256 / SHA-384 for general hashing.", "basis": "FIPS 180-4.", "resultingVulnerability": "NotVulnerable" }
+        ]
+      }
+    },
+    {
+      "name": "SHA-256",
+      "primitive": "hash",
+      "classicalSecurityLevel": 256,
+      "nistQuantumSecurityLevel": 2,
+      "oid": "2.16.840.1.101.3.4.2.1",
+      "quantumVulnerability": "NotVulnerable",
+      "quantumThreat": "None",
+      "classicalWeakness": "None",
+      "basis": "FIPS 180-4. Grover reduces preimage resistance to ~128 bits, which remains adequate."
+    },
+    {
+      "name": "SHA-384",
+      "primitive": "hash",
+      "classicalSecurityLevel": 384,
+      "nistQuantumSecurityLevel": 4,
+      "oid": "2.16.840.1.101.3.4.2.2",
+      "quantumVulnerability": "NotVulnerable",
+      "quantumThreat": "None",
+      "classicalWeakness": "None",
+      "basis": "FIPS 180-4. Selected by CNSA 2.0 for quantum-resistant hashing."
+    },
+    {
+      "name": "SHA-512",
+      "primitive": "hash",
+      "classicalSecurityLevel": 512,
+      "nistQuantumSecurityLevel": 5,
+      "oid": "2.16.840.1.101.3.4.2.3",
+      "quantumVulnerability": "NotVulnerable",
+      "quantumThreat": "None",
+      "classicalWeakness": "None",
+      "basis": "FIPS 180-4."
+    },
+    {
+      "name": "RSA",
+      "primitive": "public-key",
+      "oid": "1.2.840.113549.1.1.1",
+      "quantumVulnerability": "Vulnerable",
+      "quantumThreat": "Shor",
+      "classicalWeakness": "None",
+      "basis": "Shor's algorithm breaks RSA on a cryptographically relevant quantum computer. NIST IR 8547 (Initial Public Draft, Nov 2024 - DRAFT) plans deprecation of ~112-bit-equivalent (RSA-2048) by 2030 and disallowance by 2035.",
+      "recommendation": {
+        "summary": "Migrate to a hybrid KEM (X25519+ML-KEM) for key establishment or ML-DSA for signatures.",
+        "options": [
+          { "description": "Hybrid key establishment: X25519 + ML-KEM-768.", "basis": "FIPS 203 (ML-KEM); CNSA 2.0 transition posture; IETF hybrid drafts.", "tradeoffs": "Safe even if one half is broken; library support still maturing.", "resultingVulnerability": "PostQuantum" },
+          { "description": "Pure ML-KEM-768 once peers support it.", "basis": "FIPS 203.", "tradeoffs": "Simplest end state; no classical fallback during transition.", "resultingVulnerability": "PostQuantum" },
+          { "description": "If migration must wait, ensure RSA >= 3072 and record in the migration plan.", "basis": "NIST IR 8547 (DRAFT); NIST SP 800-57.", "tradeoffs": "Interim only - still quantum-vulnerable.", "resultingVulnerability": "Vulnerable" }
+        ]
+      }
+    },
+    {
+      "name": "ECDSA",
+      "primitive": "signature",
+      "oid": "1.2.840.10045.2.1",
+      "quantumVulnerability": "Vulnerable",
+      "quantumThreat": "Shor",
+      "classicalWeakness": "None",
+      "basis": "Shor's algorithm breaks elliptic-curve discrete log. CNSA 2.0 and NIST IR 8547 (DRAFT) require migration of ECC signatures to PQC.",
+      "recommendation": {
+        "summary": "Migrate signatures to ML-DSA (or SLH-DSA for long-lived/firmware signing).",
+        "options": [
+          { "description": "ML-DSA (FIPS 204) for general digital signatures.", "basis": "FIPS 204; CNSA 2.0.", "resultingVulnerability": "PostQuantum" },
+          { "description": "SLH-DSA (FIPS 205) for firmware/code signing and long-lived roots.", "basis": "FIPS 205; CNSA 2.0 code-signing posture.", "tradeoffs": "Larger signatures; conservative hash-based security.", "resultingVulnerability": "PostQuantum" }
+        ]
+      }
+    },
+    {
+      "name": "ECDH",
+      "primitive": "key-agree",
+      "oid": "1.2.840.10045.2.1",
+      "quantumVulnerability": "Vulnerable",
+      "quantumThreat": "Shor",
+      "classicalWeakness": "None",
+      "basis": "Shor's algorithm breaks elliptic-curve Diffie-Hellman. Harvest-now-decrypt-later makes recorded key exchanges a present-day confidentiality risk.",
+      "recommendation": {
+        "summary": "Use a hybrid KEM (X25519 + ML-KEM-768) for key establishment.",
+        "options": [
+          { "description": "Hybrid X25519 + ML-KEM-768.", "basis": "FIPS 203; CNSA 2.0 transition posture.", "resultingVulnerability": "PostQuantum" },
+          { "description": "Pure ML-KEM-768 once peers support it.", "basis": "FIPS 203.", "resultingVulnerability": "PostQuantum" }
+        ]
+      }
+    },
+    {
+      "name": "DSA",
+      "primitive": "signature",
+      "oid": "1.2.840.10040.4.1",
+      "quantumVulnerability": "Vulnerable",
+      "quantumThreat": "Shor",
+      "classicalWeakness": "Deprecated",
+      "basis": "Finite-field DSA is broken by Shor and is also deprecated for new use by NIST (FIPS 186-5 removes DSA generation).",
+      "recommendation": {
+        "summary": "Migrate signatures to ML-DSA (FIPS 204).",
+        "options": [
+          { "description": "ML-DSA (FIPS 204).", "basis": "FIPS 204; FIPS 186-5.", "resultingVulnerability": "PostQuantum" }
+        ]
+      }
+    },
+    {
+      "name": "ML-KEM",
+      "primitive": "kem",
+      "oid": "2.16.840.1.101.3.4.4",
+      "quantumVulnerability": "PostQuantum",
+      "quantumThreat": "None",
+      "classicalWeakness": "None",
+      "basis": "FIPS 203 (ML-KEM), standardized by NIST in 2024. Post-quantum key encapsulation."
+    },
+    {
+      "name": "ML-DSA",
+      "primitive": "signature",
+      "oid": "2.16.840.1.101.3.4.3",
+      "quantumVulnerability": "PostQuantum",
+      "quantumThreat": "None",
+      "classicalWeakness": "None",
+      "basis": "FIPS 204 (ML-DSA), standardized by NIST in 2024. Post-quantum digital signatures."
+    },
+    {
+      "name": "SLH-DSA",
+      "primitive": "signature",
+      "quantumVulnerability": "PostQuantum",
+      "quantumThreat": "None",
+      "classicalWeakness": "None",
+      "basis": "FIPS 205 (SLH-DSA), standardized by NIST in 2024. Stateless hash-based signatures."
+    }
+  ]
+}
