@@ -25,6 +25,13 @@ internal static class ScanRunner
                 options.Formats = config.Formats.ToList();
         }
 
+        // Resolve the policy profile: CLI --profile wins, then config, else the conservative default.
+        string? requestedProfile = options.Profile ?? config?.Profile;
+        if (requestedProfile is not null && !PolicyProfile.IsKnown(requestedProfile))
+            diagnostics.Add($"config: unknown profile '{requestedProfile}'; using 'general'. "
+                + $"Known: {string.Join(", ", PolicyProfile.Names)}.");
+        PolicyProfile profile = PolicyProfile.Get(requestedProfile);
+
         string baseDirectory = File.Exists(target) ? Path.GetDirectoryName(target) ?? "." : target;
 
         KnowledgeBase knowledgeBase = KnowledgeBase.LoadDefault();
@@ -37,7 +44,8 @@ internal static class ScanRunner
         ResolvedScan resolved;
         try
         {
-            resolved = await TargetResolver.ResolveAsync(target, diagnostics);
+            resolved = await TargetResolver.ResolveAsync(
+                target, diagnostics, options.MsBuildProperties, options.Restore);
         }
         catch (Exception ex)
         {
@@ -47,13 +55,22 @@ internal static class ScanRunner
 
         var projects = new List<ProjectInventory>();
         var frameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var summaries = new List<AppliedConfigSummary>();
         int analyzed = 0, failed = 0;
+
+        HashSet<string>? changedSet = options.ChangedFiles is { Count: > 0 }
+            ? options.ChangedFiles.Select(NormalizePath).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : null;
+        if (changedSet is not null)
+            diagnostics.Add($"PR mode: findings restricted to {changedSet.Count} changed file(s).");
 
         foreach (LoadedProject lp in resolved.Projects)
         {
             if (!lp.Ok || lp.Compilation is null)
             {
                 failed++;
+                diagnostics.Add($"project '{lp.Name}' NOT analyzed (treated as unknown, not clean): "
+                    + (lp.FailureReason ?? "load failed; see workspace diagnostics above."));
                 projects.Add(new ProjectInventory { Name = lp.Name, FilePath = lp.Path, Analyzed = false });
                 continue;
             }
@@ -66,9 +83,21 @@ internal static class ScanRunner
             foreach (ScanDiagnostic d in result.Diagnostics)
                 diagnostics.Add($"{lp.Name}/{d.Source}: {d.Message}");
 
-            IReadOnlyList<CryptoFinding> findings =
+            IReadOnlyList<CryptoFinding> roslyn =
                 FindingPostProcessor.Relativize(result.Findings, baseDirectory);
-            findings = ConfigApplication.Apply(findings, config, diagnostics);
+
+            // Dependency-aware inventory from the package manifest complements source analysis.
+            IReadOnlyList<CryptoFinding> pkg =
+                PackageCryptoInventory.Inventory(lp.Path, baseDirectory, diagnostics);
+
+            IReadOnlyList<CryptoFinding> findings = pkg.Count == 0 ? roslyn : roslyn.Concat(pkg).ToList();
+
+            ConfigApplicationResult applied = ConfigApplication.Apply(findings, config, profile, diagnostics);
+            summaries.Add(applied.Summary);
+            findings = applied.Findings;
+
+            if (changedSet is not null)
+                findings = findings.Where(f => changedSet.Contains(NormalizePath(f.Location.FilePath))).ToList();
 
             ReadinessResult readiness = ReadinessCalculator.Calculate(findings);
             projects.Add(new ProjectInventory
@@ -98,10 +127,15 @@ internal static class ScanRunner
                 TargetFrameworks = frameworks.ToArray(),
                 ProjectsAnalyzed = analyzed,
                 ProjectsFailed = failed,
+                PolicyProfile = profile.Name,
+                KnowledgeBaseVersion = knowledgeBase.Version,
+                AppliedConfig = MergeSummaries(summaries),
             },
             Projects = projects,
             SolutionReadinessScore = solutionReadiness.Score,
         };
+
+        document = ApplyBaselineStatus(document, options, diagnostics);
 
         Directory.CreateDirectory(options.OutputDir);
         WriteReports(document, options, diagnostics);
@@ -113,12 +147,40 @@ internal static class ScanRunner
         return ComputeExitCode(document, allFindings, options);
     }
 
+    private static string NormalizePath(string path) => path.Replace('\\', '/').TrimStart('.', '/');
+
+    private static AppliedConfigSummary MergeSummaries(IReadOnlyList<AppliedConfigSummary> summaries)
+    {
+        if (summaries.Count == 0)
+            return new AppliedConfigSummary();
+
+        var waivers = new Dictionary<string, WaiverRecord>(StringComparer.Ordinal);
+        foreach (WaiverRecord w in summaries.SelectMany(s => s.Waivers))
+        {
+            waivers[w.RuleId] = waivers.TryGetValue(w.RuleId, out WaiverRecord? e)
+                ? e with { Count = e.Count + w.Count }
+                : w;
+        }
+
+        return new AppliedConfigSummary
+        {
+            SuppressedByDisabledRule = summaries.Sum(s => s.SuppressedByDisabledRule),
+            SuppressedByPathFilter = summaries.Sum(s => s.SuppressedByPathFilter),
+            ElevatedByDataSensitivity = summaries.Sum(s => s.ElevatedByDataSensitivity),
+            ElevatedByPolicyProfile = summaries.Sum(s => s.ElevatedByPolicyProfile),
+            Waivers = waivers.Values.ToList(),
+            ConfiguredRuleIds = summaries.SelectMany(s => s.ConfiguredRuleIds)
+                .Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList(),
+        };
+    }
+
     private static readonly HashSet<string> ValidFailOn =
         new(StringComparer.OrdinalIgnoreCase) { "critical", "high", "medium", "low", "none" };
 
     private static void ValidateConfig(CbomConfig config, DetectorRegistry registry, List<string> diagnostics)
     {
         var known = registry.Detectors.Select(d => d.Metadata.RuleId).ToHashSet(StringComparer.Ordinal);
+        known.Add(PackageCryptoInventory.RuleId); // manifest-based inventory rule (not a Roslyn detector)
 
         if (config.Rules is not null)
         {
@@ -133,6 +195,47 @@ internal static class ScanRunner
 
         if (config.FailOn is { } failOn && !ValidFailOn.Contains(failOn))
             diagnostics.Add($"config: invalid failOn '{failOn}' (expected critical|high|medium|low|none).");
+    }
+
+    /// <summary>
+    /// When a baseline is supplied, stamp each finding's remediation status: a finding whose bom-ref is new
+    /// is <c>New</c>; one whose risk rose above the baseline is <c>Regressed</c>; otherwise <c>Unchanged</c>.
+    /// A config waiver takes precedence and is left as <c>Waived</c>. (Fixed findings live only in the diff.)
+    /// </summary>
+    private static CbomDocument ApplyBaselineStatus(CbomDocument document, ScanOptions options, List<string> diagnostics)
+    {
+        if (options.BaselinePath is null || !File.Exists(options.BaselinePath))
+            return document;
+
+        Dictionary<string, RiskLevel> baseline;
+        try
+        {
+            using FileStream stream = File.OpenRead(options.BaselinePath);
+            CbomDocument baseDoc = CbomReader.Read(stream);
+            baseline = new Dictionary<string, RiskLevel>(StringComparer.Ordinal);
+            foreach (CryptoFinding bf in baseDoc.AllFindings)
+                if (bf.BomRef is { } r)
+                    baseline[r] = bf.RiskLevel;
+        }
+        catch (Exception ex)
+        {
+            diagnostics.Add($"Baseline status mapping skipped: {ex.Message}");
+            return document;
+        }
+
+        var projects = document.Projects.Select(p => p with
+        {
+            Findings = p.Findings.Select(f =>
+            {
+                if (f.Status == RemediationStatus.Waived)
+                    return f;
+                if (f.BomRef is not { } r || !baseline.TryGetValue(r, out RiskLevel prior))
+                    return f with { Status = RemediationStatus.New };
+                return f with { Status = f.RiskLevel > prior ? RemediationStatus.Regressed : RemediationStatus.Unchanged };
+            }).ToList(),
+        }).ToList();
+
+        return document with { Projects = projects };
     }
 
     private static void RunBaselineDiff(CbomDocument current, ScanOptions options, List<string> diagnostics)

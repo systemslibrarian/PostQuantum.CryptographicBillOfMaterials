@@ -1,14 +1,33 @@
 {
   "// docs": "Example cbom.config.json. CLI flags override these; this overrides built-in defaults.",
+  "profile": "general",
   "include": ["src/**"],
   "exclude": ["**/*.Tests/**", "**/Generated/**", "**/obj/**", "**/bin/**"],
   "failOn": "high",
   "formats": ["cyclonedx", "sarif", "summary"],
+
   "rules": {
-    "CBOM0050": { "enabled": false },
-    "CBOM0002": { "severityFloor": "critical" }
+    "CBOM0002": { "severityFloor": "critical" },
+
+    "// per-algorithm tuning": "Tune one algorithm without disabling the whole rule.",
+    "CBOM0010": {
+      "algorithms": {
+        "MD5": { "severityFloor": "critical" }
+      }
+    },
+
+    "// auditable waiver": "Disabling a rule is a recorded waiver. Under the 'audit' profile it annotates instead of suppressing; an expired waiver re-activates the finding.",
+    "CBOM0050": {
+      "enabled": false,
+      "waiverJustification": "System.Random used only for non-security jitter; reviewed.",
+      "waiverApprover": "security-team",
+      "waiverExpiry": "2027-01-01"
+    }
   },
+
+  "// data sensitivity": "Long-lived confidentiality protected by quantum-vulnerable crypto is the top HNDL priority. Match by path glob, or by namespace with an 'ns:' key.",
   "dataSensitivityHints": {
-    "src/Payments/**": { "dataLifetimeYears": 25, "dataClass": "financial" }
+    "src/Payments/**": { "dataLifetimeYears": 25, "dataClass": "financial" },
+    "ns:Contoso.Billing.*": { "dataLifetimeYears": 30, "dataClass": "regulated" }
   }
 }

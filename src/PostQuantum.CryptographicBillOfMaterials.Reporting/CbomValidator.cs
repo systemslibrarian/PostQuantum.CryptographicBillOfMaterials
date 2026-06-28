@@ -55,6 +55,7 @@ public static class CbomValidator
             {
                 IReadOnlyDictionary<string, string> metaProps = ReadProperties(metadata);
                 RequireProperty(metaProps, "cbom:profile:version", "$.metadata.properties", issues, "error");
+                RequireProperty(metaProps, "cbom:policy:profile", "$.metadata.properties", issues, "warning");
                 RequireProperty(metaProps, "cbom:readiness:score", "$.metadata.properties", issues, "warning");
                 RequireProperty(metaProps, "cbom:coverage:projectsAnalyzed", "$.metadata.properties", issues, "warning");
             }

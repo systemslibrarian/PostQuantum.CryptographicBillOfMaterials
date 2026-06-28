@@ -10,7 +10,8 @@ internal sealed record LoadedProject(
     string? Path,
     Compilation? Compilation,
     IReadOnlyList<string> TargetFrameworks,
-    bool Ok);
+    bool Ok,
+    string? FailureReason = null);
 
 /// <summary>
 /// Best-effort MSBuild workspace loader. Requires the .NET SDK to be present (design decision §8.3 #2).
@@ -29,11 +30,14 @@ internal static class WorkspaceLoader
         _registered = true;
     }
 
-    public static async Task<IReadOnlyList<LoadedProject>> LoadAsync(string slnOrProjPath, IList<string> diagnostics)
+    public static async Task<IReadOnlyList<LoadedProject>> LoadAsync(
+        string slnOrProjPath, IList<string> diagnostics, IReadOnlyDictionary<string, string>? msbuildProperties = null)
     {
         EnsureRegistered();
 
-        using MSBuildWorkspace workspace = MSBuildWorkspace.Create();
+        using MSBuildWorkspace workspace = msbuildProperties is { Count: > 0 }
+            ? MSBuildWorkspace.Create(new Dictionary<string, string>(msbuildProperties))
+            : MSBuildWorkspace.Create();
         workspace.WorkspaceFailed += (_, e) =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
@@ -57,13 +61,17 @@ internal static class WorkspaceLoader
         {
             Compilation? compilation = null;
             bool ok = false;
+            string? failureReason = null;
             try
             {
                 compilation = await project.GetCompilationAsync();
                 ok = compilation is not null;
+                if (!ok)
+                    failureReason = "Roslyn produced no compilation (unsupported project type or missing references).";
             }
             catch (Exception ex)
             {
+                failureReason = ex.Message;
                 diagnostics.Add($"{project.Name}: {ex.Message}");
             }
 
@@ -76,7 +84,7 @@ internal static class WorkspaceLoader
                     frameworks.Add(project.Name.Substring(open + 1, project.Name.Length - open - 2));
             }
 
-            result.Add(new LoadedProject(project.Name, project.FilePath, compilation, frameworks, ok));
+            result.Add(new LoadedProject(project.Name, project.FilePath, compilation, frameworks, ok, failureReason));
         }
 
         return result;

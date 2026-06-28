@@ -12,4 +12,16 @@
     <ProjectReference Include="..\PostQuantum.CryptographicBillOfMaterials\PostQuantum.CryptographicBillOfMaterials.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Pure-managed JSON Schema validator used to validate generated CBOMs against the official
+         CycloneDX 1.6 JSON Schema bundled under Schemas/. -->
+    <PackageReference Include="JsonSchema.Net" Version="7.3.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Schemas\bom-1.6.schema.json" />
+    <EmbeddedResource Include="Schemas\spdx.schema.json" />
+    <EmbeddedResource Include="Schemas\jsf-0.82.schema.json" />
+  </ItemGroup>
+
 </Project>

@@ -103,90 +103,173 @@ internal static class ConfigLoader
     }
 }
 
-/// <summary>Applies config-driven rule toggles, severity floors, and path filters to findings.</summary>
+/// <summary>Findings after config/policy is applied, plus a transparent record of what was applied.</summary>
+internal sealed record ConfigApplicationResult(
+    IReadOnlyList<CryptoFinding> Findings, AppliedConfigSummary Summary);
+
+/// <summary>
+/// Applies, in a fixed and auditable order: rule/algorithm toggles and waivers, include/exclude filters,
+/// raise-only severity floors, policy-profile floors, and data-sensitivity (HNDL) elevation. Every action
+/// is counted into an <see cref="AppliedConfigSummary"/> recorded in the CBOM — nothing is dropped silently.
+/// </summary>
 internal static class ConfigApplication
 {
-    public static IReadOnlyList<CryptoFinding> Apply(
-        IReadOnlyList<CryptoFinding> findings, CbomConfig? config, IList<string> diagnostics)
+    public static ConfigApplicationResult Apply(
+        IReadOnlyList<CryptoFinding> findings, CbomConfig? config, PolicyProfile profile, IList<string> diagnostics)
     {
-        if (config is null)
-            return findings;
-
         var kept = new List<CryptoFinding>(findings.Count);
-        int disabledSuppressed = 0;
-        int pathSuppressed = 0;
-        int elevatedByData = 0;
+        int disabledSuppressed = 0, pathSuppressed = 0, elevatedByData = 0, elevatedByPolicy = 0;
+        var waivers = new Dictionary<string, WaiverRecord>(StringComparer.Ordinal);
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        foreach (CryptoFinding f in findings)
+        foreach (CryptoFinding raw in findings)
         {
-            RuleConfig? rule = null;
-            config.Rules?.TryGetValue(f.RuleId, out rule);
+            CryptoFinding f = raw with { PolicyProfile = profile.Name };
 
-            if (rule?.Enabled == false)
+            RuleConfig? rule = null;
+            config?.Rules?.TryGetValue(f.RuleId, out rule);
+            RuleConfig? algRule = ResolveAlgorithmRule(rule, f.AlgorithmName);
+            RuleConfig? effective = algRule ?? rule;
+
+            // --- Waivers / disable ---
+            bool disabled = (algRule?.Enabled ?? rule?.Enabled) == false;
+            if (disabled)
             {
-                disabledSuppressed++;
-                continue;
+                bool expired = TryParseDate(effective?.WaiverExpiry, out DateOnly exp) && exp < today;
+                bool suppress = profile.WaiversSuppress && !expired;
+                RecordWaiver(waivers, f.RuleId, effective, suppress, expired);
+
+                if (suppress)
+                {
+                    disabledSuppressed++;
+                    continue;
+                }
+
+                // Audit profile, or an expired waiver: keep the finding so it stays visible.
+                f = f with
+                {
+                    Status = expired ? f.Status : RemediationStatus.Waived,
+                    WaiverJustification = effective?.WaiverJustification,
+                    WaiverApprover = effective?.WaiverApprover,
+                    WaiverExpiry = effective?.WaiverExpiry,
+                };
+                if (expired)
+                    diagnostics.Add($"config: waiver for {f.RuleId} expired {effective?.WaiverExpiry}; finding re-activated.");
             }
 
-            if (config.Exclude is { Length: > 0 }
+            // --- Path filters ---
+            if (config?.Exclude is { Length: > 0 }
                 && config.Exclude.Any(g => GlobMatcher.IsMatch(f.Location.FilePath, g)))
             {
                 pathSuppressed++;
                 continue;
             }
-
-            if (config.Include is { Length: > 0 }
+            if (config?.Include is { Length: > 0 }
                 && !config.Include.Any(g => GlobMatcher.IsMatch(f.Location.FilePath, g)))
             {
                 pathSuppressed++;
                 continue;
             }
 
-            CryptoFinding outFinding = f;
-            if (rule?.SeverityFloor is { } floorText
-                && Levels.ParseLevel(floorText) is { } floor
-                && floor > f.RiskLevel)
+            // --- Raise-only severity floors (per-algorithm wins over per-rule) ---
+            string? floorText = effective?.SeverityFloor ?? rule?.SeverityFloor;
+            if (floorText is not null && Levels.ParseLevel(floorText) is { } floor && floor > f.RiskLevel)
+                f = f with { RiskLevel = floor };
+
+            // --- Policy-profile floors (raise-only; never lowers a finding) ---
+            RiskLevel? policyFloor = f.QuantumVulnerability switch
             {
-                outFinding = f with { RiskLevel = floor };
+                QuantumVulnerability.Vulnerable => profile.QuantumVulnerableFloor,
+                QuantumVulnerability.ReducedMargin => profile.ReducedMarginFloor,
+                _ => null,
+            };
+            if (policyFloor is { } pf && pf > f.RiskLevel)
+            {
+                f = f with { RiskLevel = pf };
+                elevatedByPolicy++;
             }
 
-            // Harvest-now-decrypt-later: long-lived confidentiality protected by quantum-vulnerable
-            // crypto is elevated to Critical. Data lifetime comes from dataSensitivityHints (TDD §6.7).
-            if (IsLongLivedQuantumExposure(outFinding, config) && outFinding.RiskLevel < RiskLevel.Critical)
+            // --- Data sensitivity: long-lived HNDL exposure -> Critical ---
+            if (IsLongLivedQuantumExposure(f, config) && f.RiskLevel < RiskLevel.Critical)
             {
-                outFinding = outFinding with { RiskLevel = RiskLevel.Critical };
+                f = f with { RiskLevel = RiskLevel.Critical };
                 elevatedByData++;
             }
 
-            kept.Add(outFinding);
+            kept.Add(f);
         }
 
         if (disabledSuppressed > 0)
             diagnostics.Add($"config: {disabledSuppressed} finding(s) suppressed by disabled rules (recorded waiver).");
         if (pathSuppressed > 0)
             diagnostics.Add($"config: {pathSuppressed} finding(s) suppressed by include/exclude filters.");
+        if (elevatedByPolicy > 0)
+            diagnostics.Add($"policy[{profile.Name}]: {elevatedByPolicy} finding(s) elevated by profile floor.");
         if (elevatedByData > 0)
             diagnostics.Add($"config: {elevatedByData} finding(s) elevated to Critical by data-sensitivity (long-lived HNDL exposure).");
 
-        return kept;
+        var summary = new AppliedConfigSummary
+        {
+            SuppressedByDisabledRule = disabledSuppressed,
+            SuppressedByPathFilter = pathSuppressed,
+            ElevatedByDataSensitivity = elevatedByData,
+            ElevatedByPolicyProfile = elevatedByPolicy,
+            Waivers = waivers.Values.ToList(),
+            ConfiguredRuleIds = config?.Rules?.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList()
+                ?? (IReadOnlyList<string>)Array.Empty<string>(),
+        };
+        return new ConfigApplicationResult(kept, summary);
     }
 
-    private static bool IsLongLivedQuantumExposure(CryptoFinding f, CbomConfig config)
+    private static RuleConfig? ResolveAlgorithmRule(RuleConfig? rule, string algorithmName)
     {
-        if (config.DataSensitivityHints is null || config.DataSensitivityHints.Count == 0)
+        if (rule?.Algorithms is null)
+            return null;
+        // Exact match first, then a case-insensitive contains (so "AES-128" matches a key "AES-128").
+        foreach ((string key, RuleConfig rc) in rule.Algorithms)
+        {
+            if (string.Equals(key, algorithmName, StringComparison.OrdinalIgnoreCase)
+                || algorithmName.Contains(key, StringComparison.OrdinalIgnoreCase))
+            {
+                return rc;
+            }
+        }
+        return null;
+    }
+
+    private static void RecordWaiver(
+        Dictionary<string, WaiverRecord> waivers, string ruleId, RuleConfig? rc, bool suppress, bool expired)
+    {
+        if (waivers.TryGetValue(ruleId, out WaiverRecord? existing))
+            waivers[ruleId] = existing with { Count = existing.Count + 1 };
+        else
+            waivers[ruleId] = new WaiverRecord(
+                ruleId, rc?.WaiverJustification, rc?.WaiverApprover, rc?.WaiverExpiry, suppress, expired, 1);
+    }
+
+    private static bool TryParseDate(string? value, out DateOnly date) =>
+        DateOnly.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out date);
+
+    private static bool IsLongLivedQuantumExposure(CryptoFinding f, CbomConfig? config)
+    {
+        if (config?.DataSensitivityHints is null || config.DataSensitivityHints.Count == 0)
             return false;
         if (f.QuantumVulnerability != QuantumVulnerability.Vulnerable)
             return false;
         if (f.UsageContext is not (UsageContext.AtRest or UsageContext.InTransit or UsageContext.KeyExchange))
             return false;
 
-        foreach ((string glob, DataSensitivityHint hint) in config.DataSensitivityHints)
+        foreach ((string key, DataSensitivityHint hint) in config.DataSensitivityHints)
         {
-            if ((hint.DataLifetimeYears ?? 0) >= CbomConfig.LongLivedYearsThreshold
-                && GlobMatcher.IsMatch(f.Location.FilePath, glob))
-            {
+            if ((hint.DataLifetimeYears ?? 0) < CbomConfig.LongLivedYearsThreshold)
+                continue;
+
+            bool match = key.StartsWith("ns:", StringComparison.OrdinalIgnoreCase)
+                ? f.Location.Namespace is { } ns && GlobMatcher.IsMatch(ns, key[3..])
+                : GlobMatcher.IsMatch(f.Location.FilePath, key);
+            if (match)
                 return true;
-            }
         }
         return false;
     }

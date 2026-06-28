@@ -9,7 +9,26 @@
     <Description>dotnet-cbom: command-line Cryptographic Bill of Materials generator for .NET.</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-cbom</ToolCommandName>
+
+    <!-- Supply-chain / provenance: deterministic, source-linked, symbol-published builds. CI sets
+         ContinuousIntegrationBuild=true for fully reproducible output; signing is wired in the release
+         workflow (NUGET signing requires a code-signing certificate, supplied as a CI secret). -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>cryptography;post-quantum;pqc;cbom;cyclonedx;sarif;security;sbom;dotnet-tool</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PostQuantum.CryptographicBillOfMaterials.Cli.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Build.Locator" Version="1.7.8" />

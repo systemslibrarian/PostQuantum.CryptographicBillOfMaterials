@@ -41,34 +41,61 @@ public sealed class ScanEngine
             }
         }
 
-        foreach (SyntaxTree tree in compilation.SyntaxTrees)
+        // Trees are independent (stateless detectors, per-tree semantic models), so analyze them in
+        // parallel for throughput on large solutions, then merge results IN TREE ORDER so output stays
+        // deterministic regardless of scheduling. Degrades gracefully to sequential for a single tree.
+        SyntaxTree[] trees = compilation.SyntaxTrees.ToArray();
+        var perTree = new (List<CryptoFinding> Findings, List<ScanDiagnostic> Diagnostics)[trees.Length];
+
+        if (trees.Length <= 1)
         {
-            SemanticModel model = compilation.GetSemanticModel(tree);
-            string filePath = tree.FilePath;
-            SyntaxNode root = tree.GetRoot();
+            for (int i = 0; i < trees.Length; i++)
+                perTree[i] = AnalyzeTree(compilation, trees[i], byKind);
+        }
+        else
+        {
+            Parallel.For(0, trees.Length, i => perTree[i] = AnalyzeTree(compilation, trees[i], byKind));
+        }
 
-            foreach (SyntaxNode node in root.DescendantNodesAndSelf())
+        foreach (var (treeFindings, treeDiagnostics) in perTree)
+        {
+            findings.AddRange(treeFindings);
+            diagnostics.AddRange(treeDiagnostics);
+        }
+
+        return new CompilationScanResult(Deduplicate(findings), diagnostics);
+    }
+
+    private static (List<CryptoFinding>, List<ScanDiagnostic>) AnalyzeTree(
+        Compilation compilation, SyntaxTree tree, Dictionary<SyntaxKind, List<ICryptoDetector>> byKind)
+    {
+        var findings = new List<CryptoFinding>();
+        var diagnostics = new List<ScanDiagnostic>();
+        SemanticModel model = compilation.GetSemanticModel(tree);
+        string filePath = tree.FilePath;
+        SyntaxNode root = tree.GetRoot();
+
+        foreach (SyntaxNode node in root.DescendantNodesAndSelf())
+        {
+            if (!byKind.TryGetValue(node.Kind(), out List<ICryptoDetector>? detectors))
+                continue;
+
+            foreach (ICryptoDetector detector in detectors)
             {
-                if (!byKind.TryGetValue(node.Kind(), out List<ICryptoDetector>? detectors))
-                    continue;
-
-                foreach (ICryptoDetector detector in detectors)
+                var ctx = new DetectionContext(node, model, filePath, findings.Add);
+                try
                 {
-                    var ctx = new DetectionContext(node, model, filePath, findings.Add);
-                    try
-                    {
-                        detector.Inspect(ctx);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Isolate a misbehaving detector; record rather than crash the scan.
-                        diagnostics.Add(new ScanDiagnostic(detector.Metadata.RuleId, ex.Message));
-                    }
+                    detector.Inspect(ctx);
+                }
+                catch (Exception ex)
+                {
+                    // Isolate a misbehaving detector; record rather than crash the scan.
+                    diagnostics.Add(new ScanDiagnostic(detector.Metadata.RuleId, ex.Message));
                 }
             }
         }
 
-        return new CompilationScanResult(Deduplicate(findings), diagnostics);
+        return (findings, diagnostics);
     }
 
     /// <summary>Convenience overload returning only findings (used by tests and simple callers).</summary>

@@ -1,0 +1,98 @@
+name: "dotnet-cbom"
+description: "Generate a Cryptographic Bill of Materials (CBOM) for .NET code, upload SARIF, and gate on quantum risk."
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  target:
+    description: "Path to a .sln/.slnx/.csproj, directory, or .cs file to scan."
+    required: false
+    default: "."
+  formats:
+    description: "Comma-separated output formats: cyclonedx,sarif,markdown,html,summary."
+    required: false
+    default: "cyclonedx,sarif,summary"
+  output:
+    description: "Output directory for reports."
+    required: false
+    default: "cbom-out"
+  profile:
+    description: "Policy posture: general | federal | cnsa2 | audit | developer."
+    required: false
+    default: "general"
+  fail-on:
+    description: "Minimum risk level that fails the job: critical | high | medium | low | none."
+    required: false
+    default: "high"
+  baseline:
+    description: "Optional prior CBOM (cbom.cbom.json) to diff against; sets remediation status."
+    required: false
+    default: ""
+  config:
+    description: "Optional path to cbom.config.json."
+    required: false
+    default: ""
+  tool-version:
+    description: "Version of the PostQuantum.CryptographicBillOfMaterials.Cli global tool to install."
+    required: false
+    default: "latest"
+  upload-sarif:
+    description: "Upload the generated SARIF to GitHub code scanning."
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: "The dotnet-cbom exit code (0 ok, 1 at/above fail-on, 2 partial, 3 usage, 4 internal)."
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install dotnet-cbom
+      shell: bash
+      run: |
+        if [ "${{ inputs.tool-version }}" = "latest" ]; then
+          dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli || \
+            dotnet tool update -g PostQuantum.CryptographicBillOfMaterials.Cli
+        else
+          dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli --version "${{ inputs.tool-version }}"
+        fi
+        echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      run: |
+        args=(scan "${{ inputs.target }}" --format "${{ inputs.formats }}" \
+          --output "${{ inputs.output }}" --profile "${{ inputs.profile }}" --fail-on "${{ inputs.fail-on }}")
+        [ -n "${{ inputs.baseline }}" ] && args+=(--baseline "${{ inputs.baseline }}")
+        [ -n "${{ inputs.config }}" ] && args+=(--config "${{ inputs.config }}")
+        set +e
+        dotnet-cbom "${args[@]}"
+        code=$?
+        set -e
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        # Partial scans (exit 2) and gate hits (exit 1) should fail the job; surface the real code.
+        exit $code
+
+    - name: Validate generated CBOM (schema + profile)
+      if: always()
+      shell: bash
+      run: dotnet-cbom validate "${{ inputs.output }}/cbom.cbom.json"
+
+    - name: Upload SARIF
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output }}/cbom.sarif
+      continue-on-error: true
+
+    - name: Upload CBOM artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cbom
+        path: ${{ inputs.output }}/
+        retention-days: 30

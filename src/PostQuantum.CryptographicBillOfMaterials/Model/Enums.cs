@@ -85,6 +85,22 @@ public enum CryptoAssetType
     RelatedCryptoMaterial,
 }
 
+/// <summary>
+/// The remediation lifecycle state of a finding, for audit-packet reporting. <see cref="New"/>,
+/// <see cref="Unchanged"/>, <see cref="Fixed"/>, and <see cref="Regressed"/> are derived from a baseline
+/// diff; <see cref="Waived"/> comes from an explicit, justified config waiver.
+/// </summary>
+public enum RemediationStatus
+{
+    /// <summary>No baseline was supplied, so lifecycle state is unknown.</summary>
+    Unknown = 0,
+    New,
+    Unchanged,
+    Fixed,
+    Regressed,
+    Waived,
+}
+
 /// <summary>Detection rule category.</summary>
 public enum RuleCategory
 {

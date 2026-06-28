@@ -1,0 +1,57 @@
+# Example: add dotnet-cbom to a .NET repo's CI with SARIF upload, PR baseline diff, and a quantum-risk gate.
+# Copy into .github/workflows/cbom.yml in your repository.
+name: CBOM
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write   # required to upload SARIF to code scanning
+  pull-requests: write      # required to comment the baseline diff on PRs
+
+jobs:
+  cbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Pull the last main-branch CBOM (if any) to diff against, so PRs surface only NEW/REGRESSED risk.
+      - name: Download baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: cbom
+          path: baseline
+        continue-on-error: true
+
+      - name: Run dotnet-cbom
+        id: cbom
+        uses: systemslibrarian/CryptographicBillOfMaterials@v1
+        with:
+          target: ./YourSolution.sln
+          formats: cyclonedx,sarif,markdown,summary
+          profile: general
+          # Warn on a PR (don't block), but fail the main-branch gate on new High+.
+          fail-on: ${{ github.event_name == 'pull_request' && 'none' || 'high' }}
+          baseline: baseline/cbom.cbom.json
+
+      - name: Comment baseline diff on PR
+        if: ${{ github.event_name == 'pull_request' && hashFiles('cbom-out/cbom.diff.md') != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = '## 🔐 CBOM diff\n\n' + fs.readFileSync('cbom-out/cbom.diff.md', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

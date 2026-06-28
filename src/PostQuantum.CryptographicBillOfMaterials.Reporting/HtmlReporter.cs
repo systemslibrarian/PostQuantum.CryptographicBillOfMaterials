@@ -29,7 +29,7 @@ public sealed class HtmlReporter : IReportRenderer
         sb.AppendLine("<p class=\"meta\">"
             + $"{E(m.SolutionName ?? "scan")} · {E(m.ToolName)} {E(m.ToolVersion)} · "
             + $"CycloneDX {E(m.CycloneDxSpecVersion)} · profile {E(m.ProfileVersion)} · "
-            + $"{E(m.Timestamp.ToString("u"))}</p>");
+            + $"policy <b>{E(m.PolicyProfile)}</b> · {E(m.Timestamp.ToString("u"))}</p>");
 
         string coverage = $"Analyzed {m.ProjectsAnalyzed} of {totalProjects} projects";
         if (m.ProjectsFailed > 0)
@@ -48,6 +48,36 @@ public sealed class HtmlReporter : IReportRenderer
         }
         sb.AppendLine("</div>");
 
+        // Top migration actions
+        var actions = AuditInsights.TopActions(document, 10);
+        if (actions.Count > 0)
+        {
+            sb.AppendLine("<h2>Top migration actions</h2>");
+            sb.AppendLine("<table><thead><tr><th>#</th><th>Severity</th><th>Project</th><th>Algorithm</th>"
+                + "<th>Rule</th><th>Count</th><th>Action</th></tr></thead><tbody>");
+            int rank = 1;
+            foreach (AuditInsights.MigrationAction a in actions)
+            {
+                sb.AppendLine("<tr>"
+                    + $"<td>{rank}</td>"
+                    + $"<td><span class=\"pill sev-{a.Level}\">{a.Level}</span></td>"
+                    + $"<td>{E(a.Project)}</td><td><b>{E(a.Algorithm)}</b></td>"
+                    + $"<td>{E(a.RuleId)}</td><td>{a.Count}</td><td>{E(a.Action)}</td></tr>");
+                rank++;
+            }
+            sb.AppendLine("</tbody></table>");
+        }
+
+        // What changed since baseline
+        if (AuditInsights.HasRemediationStatus(document))
+        {
+            sb.AppendLine("<h2>What changed since baseline</h2><table><thead><tr><th>Status</th>"
+                + "<th>Count</th></tr></thead><tbody>");
+            foreach ((RemediationStatus status, int count) in AuditInsights.StatusBreakdown(document))
+                sb.AppendLine($"<tr><td>{E(status.ToString())}</td><td>{count}</td></tr>");
+            sb.AppendLine("</tbody></table>");
+        }
+
         // Per-project readiness
         sb.AppendLine("<h2>Projects</h2><table><thead><tr><th>Project</th><th>Analyzed</th>"
             + "<th>Readiness</th><th>Findings</th></tr></thead><tbody>");
@@ -62,9 +92,11 @@ public sealed class HtmlReporter : IReportRenderer
         sb.AppendLine("</tbody></table>");
 
         // Findings
+        bool showStatus = AuditInsights.HasRemediationStatus(document);
         sb.AppendLine($"<h2>Findings ({findings.Count})</h2>");
         sb.AppendLine("<table><thead><tr><th>Severity</th><th>Rule</th><th>Algorithm</th>"
-            + "<th>Location</th><th>Quantum</th><th>Recommendation</th></tr></thead><tbody>");
+            + "<th>Location</th><th>Quantum</th>" + (showStatus ? "<th>Status</th>" : string.Empty)
+            + "<th>Recommendation</th></tr></thead><tbody>");
         foreach (CryptoFinding f in findings)
         {
             sb.AppendLine("<tr>"
@@ -73,10 +105,27 @@ public sealed class HtmlReporter : IReportRenderer
                 + $"<td><b>{E(f.AlgorithmName)}</b></td>"
                 + $"<td><code>{E(f.Location.FilePath)}:{f.Location.Line}</code></td>"
                 + $"<td>{E(QuantumLabel(f))}</td>"
+                + (showStatus ? $"<td>{E(f.Status.ToString())}</td>" : string.Empty)
                 + $"<td>{E(f.Recommendation.Summary)}</td>"
                 + "</tr>");
         }
         sb.AppendLine("</tbody></table>");
+
+        // Waivers
+        var waivers = document.Metadata.AppliedConfig?.Waivers;
+        if (waivers is { Count: > 0 })
+        {
+            sb.AppendLine("<h2>Waivers</h2><table><thead><tr><th>Rule</th><th>Count</th><th>State</th>"
+                + "<th>Expiry</th><th>Justification</th><th>Approver</th></tr></thead><tbody>");
+            foreach (WaiverRecord w in waivers)
+            {
+                string state = w.Expired ? "expired" : (w.Suppressed ? "suppressed" : "annotated");
+                sb.AppendLine($"<tr><td>{E(w.RuleId)}</td><td>{w.Count}</td><td>{E(state)}</td>"
+                    + $"<td>{E(w.Expiry ?? "—")}</td><td>{E(w.Justification ?? "—")}</td>"
+                    + $"<td>{E(w.Approver ?? "—")}</td></tr>");
+            }
+            sb.AppendLine("</tbody></table>");
+        }
 
         sb.AppendLine("<p class=\"footer\">A clean scan means &ldquo;no detectable issues in analyzed "
             + "source,&rdquo; not &ldquo;the system is quantum-safe.&rdquo;</p>");

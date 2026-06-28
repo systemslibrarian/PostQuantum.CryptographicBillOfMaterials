@@ -1,0 +1,33 @@
+# Example: dotnet-cbom in GitLab CI/CD. The CBOM and reports are kept as artifacts; the job gates on
+# quantum risk. Copy into .gitlab-ci.yml in your repository.
+stages:
+  - security
+
+cbom:
+  stage: security
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  variables:
+    GATE: "high"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      variables:
+        GATE: "none"          # warn-only on MRs
+    - when: always
+  before_script:
+    - dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli
+    - export PATH="$PATH:$HOME/.dotnet/tools"
+  script:
+    - dotnet-cbom scan ./YourSolution.sln
+        --format cyclonedx,sarif,markdown,summary
+        --output cbom-out
+        --profile general
+        --fail-on "$GATE"
+    - dotnet-cbom validate cbom-out/cbom.cbom.json
+  artifacts:
+    when: always
+    paths:
+      - cbom-out/
+    expire_in: 30 days
+    # GitLab understands SARIF in the SAST report slot:
+    reports:
+      sast: cbom-out/cbom.sarif

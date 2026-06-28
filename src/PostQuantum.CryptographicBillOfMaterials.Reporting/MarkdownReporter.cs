@@ -36,7 +36,10 @@ public sealed class MarkdownReporter : IReportRenderer
         sb.AppendLine("## Scan Metadata");
         sb.AppendLine();
         sb.AppendLine($"- **Tool:** {m.ToolName} {m.ToolVersion}");
-        sb.AppendLine($"- **Profile:** {m.ProfileVersion}");
+        sb.AppendLine($"- **Profile version:** {m.ProfileVersion}");
+        sb.AppendLine($"- **Policy profile:** {m.PolicyProfile}");
+        if (m.KnowledgeBaseVersion is { } kb)
+            sb.AppendLine($"- **Knowledge base:** {kb}");
         sb.AppendLine($"- **Timestamp:** {m.Timestamp:O}");
         var frameworks = m.TargetFrameworks.Count > 0 ? string.Join(", ", m.TargetFrameworks) : "(none)";
         sb.AppendLine($"- **Target frameworks:** {frameworks}");
@@ -44,13 +47,68 @@ public sealed class MarkdownReporter : IReportRenderer
         sb.AppendLine($"- **Coverage:** Analyzed {m.ProjectsAnalyzed} of {totalProjects} projects");
         sb.AppendLine();
 
+        AppendTopActions(sb, document);
         AppendFindingsCountTable(sb, document);
+        AppendWhatChanged(sb, document);
         AppendReadiness(sb, document);
         AppendFindings(sb, document);
+        AppendWaivers(sb, document);
 
         sb.AppendLine(Footer);
 
         WriteToStream(sb, output);
+    }
+
+    private static void AppendTopActions(StringBuilder sb, CbomDocument document)
+    {
+        var actions = AuditInsights.TopActions(document, 10);
+        if (actions.Count == 0)
+            return;
+
+        sb.AppendLine("## Top Migration Actions");
+        sb.AppendLine();
+        sb.AppendLine("| # | Severity | Project | Algorithm | Rule | Count | Action |");
+        sb.AppendLine("| --- | --- | --- | --- | --- | --- | --- |");
+        int n = 1;
+        foreach (AuditInsights.MigrationAction a in actions)
+        {
+            sb.AppendLine($"| {n} | {a.Level} | {Escape(a.Project)} | {Escape(a.Algorithm)} | {a.RuleId} | {a.Count} | {Escape(a.Action)} |");
+            n++;
+        }
+        sb.AppendLine();
+    }
+
+    private static void AppendWhatChanged(StringBuilder sb, CbomDocument document)
+    {
+        if (!AuditInsights.HasRemediationStatus(document))
+            return;
+
+        sb.AppendLine("## What Changed Since Baseline");
+        sb.AppendLine();
+        sb.AppendLine("| Status | Count |");
+        sb.AppendLine("| --- | --- |");
+        foreach ((RemediationStatus status, int count) in AuditInsights.StatusBreakdown(document))
+            sb.AppendLine($"| {status} | {count} |");
+        sb.AppendLine();
+    }
+
+    private static void AppendWaivers(StringBuilder sb, CbomDocument document)
+    {
+        var waivers = document.Metadata.AppliedConfig?.Waivers;
+        if (waivers is null || waivers.Count == 0)
+            return;
+
+        sb.AppendLine("## Waivers");
+        sb.AppendLine();
+        sb.AppendLine("| Rule | Count | State | Expiry | Justification | Approver |");
+        sb.AppendLine("| --- | --- | --- | --- | --- | --- |");
+        foreach (WaiverRecord w in waivers)
+        {
+            string state = w.Expired ? "expired" : (w.Suppressed ? "suppressed" : "annotated");
+            sb.AppendLine($"| {w.RuleId} | {w.Count} | {state} | {w.Expiry ?? "—"} | "
+                + $"{Escape(w.Justification ?? "—")} | {Escape(w.Approver ?? "—")} |");
+        }
+        sb.AppendLine();
     }
 
     private static void AppendFindingsCountTable(StringBuilder sb, CbomDocument document)
@@ -89,6 +147,8 @@ public sealed class MarkdownReporter : IReportRenderer
         sb.AppendLine("## Findings");
         sb.AppendLine();
 
+        bool showStatus = AuditInsights.HasRemediationStatus(document);
+
         foreach (var project in document.Projects)
         {
             sb.AppendLine($"### {project.Name}");
@@ -108,8 +168,10 @@ public sealed class MarkdownReporter : IReportRenderer
                 continue;
             }
 
-            sb.AppendLine("| Severity | Rule | Algorithm | Location | Quantum | Recommendation |");
-            sb.AppendLine("| --- | --- | --- | --- | --- | --- |");
+            string statusCol = showStatus ? " Status |" : string.Empty;
+            string statusSep = showStatus ? " --- |" : string.Empty;
+            sb.AppendLine($"| Severity | Rule | Algorithm | Location | Quantum |{statusCol} Recommendation |");
+            sb.AppendLine($"| --- | --- | --- | --- | --- |{statusSep} --- |");
 
             var ordered = project.Findings
                 .OrderByDescending(f => f.RiskLevel)
@@ -120,8 +182,9 @@ public sealed class MarkdownReporter : IReportRenderer
                 var location = $"{f.Location.FilePath}:{f.Location.Line}";
                 var quantum = f.QuantumVulnerability.ToString();
                 var recommendation = Escape(f.Recommendation.Summary);
+                string statusCell = showStatus ? $" {f.Status} |" : string.Empty;
                 sb.AppendLine(
-                    $"| {f.RiskLevel} | {f.RuleId} | {Escape(f.AlgorithmName)} | {Escape(location)} | {quantum} | {recommendation} |");
+                    $"| {f.RiskLevel} | {f.RuleId} | {Escape(f.AlgorithmName)} | {Escape(location)} | {quantum} |{statusCell} {recommendation} |");
             }
 
             sb.AppendLine();

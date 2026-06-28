@@ -21,8 +21,9 @@ public class DriftGuardTests
         string[] ids = Registry.Detectors.Select(d => d.Metadata.RuleId).OrderBy(x => x).ToArray();
         string[] expected =
         {
-            "CBOM0001", "CBOM0002", "CBOM0003", "CBOM0007", "CBOM0010", "CBOM0021",
-            "CBOM0030", "CBOM0040", "CBOM0041", "CBOM0050", "CBOM0060", "CBOM0070", "CBOM0090",
+            "CBOM0001", "CBOM0002", "CBOM0003", "CBOM0007", "CBOM0010", "CBOM0021", "CBOM0022",
+            "CBOM0030", "CBOM0040", "CBOM0041", "CBOM0042", "CBOM0050", "CBOM0060", "CBOM0070",
+            "CBOM0080", "CBOM0090",
         };
         Assert.Equal(expected, ids);
     }

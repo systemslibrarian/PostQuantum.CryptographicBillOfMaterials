@@ -27,3 +27,31 @@ jobs:
 
       - name: Test
         run: dotnet test CryptographicBillOfMaterials.slnx -c Release --no-build --verbosity normal
+
+      # Dogfood: scan our own samples and prove the generated CBOM validates against the OFFICIAL
+      # CycloneDX 1.6 schema + the dotnet-cbom profile on every run. This is the trust claim, mechanized.
+      - name: Self-scan sample
+        run: dotnet run -c Release --no-build --project src/PostQuantum.CryptographicBillOfMaterials.Cli --
+             scan samples/VulnerableDemo
+             --format cyclonedx,sarif,summary
+             --output cbom-out
+             --fail-on none
+
+      - name: Validate generated CBOM (schema + profile)
+        run: dotnet run -c Release --no-build --project src/PostQuantum.CryptographicBillOfMaterials.Cli --
+             validate cbom-out/cbom.cbom.json
+
+      - name: Upload CBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbom
+          path: cbom-out/
+          retention-days: 30
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: cbom-out/cbom.sarif
+        continue-on-error: true

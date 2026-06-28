@@ -73,16 +73,40 @@ public sealed class CycloneDxReporter : IReportRenderer
                 ["bom-ref"] = "root",
                 ["name"] = m.SolutionName ?? "solution",
             },
-            ["properties"] = new object[]
-            {
-                Property("cbom:profile:version", m.ProfileVersion),
-                Property("cbom:readiness:score", document.SolutionReadinessScore.ToString()),
-                Property("cbom:readiness:formulaVersion", "1.0"),
-                Property("cbom:coverage:projectsAnalyzed", m.ProjectsAnalyzed.ToString()),
-                Property("cbom:coverage:projectsFailed", m.ProjectsFailed.ToString()),
-                Property("cbom:cyclonedx:specVersion", m.CycloneDxSpecVersion),
-            },
+            ["properties"] = BuildMetadataProperties(document),
         };
+    }
+
+    private static List<object> BuildMetadataProperties(CbomDocument document)
+    {
+        var m = document.Metadata;
+        var props = new List<object>
+        {
+            Property("cbom:profile:version", m.ProfileVersion),
+            Property("cbom:policy:profile", m.PolicyProfile),
+            Property("cbom:readiness:score", document.SolutionReadinessScore.ToString()),
+            Property("cbom:readiness:formulaVersion", "1.0"),
+            Property("cbom:coverage:projectsAnalyzed", m.ProjectsAnalyzed.ToString()),
+            Property("cbom:coverage:projectsFailed", m.ProjectsFailed.ToString()),
+            Property("cbom:cyclonedx:specVersion", m.CycloneDxSpecVersion),
+        };
+
+        if (m.KnowledgeBaseVersion is { } kb)
+            props.Add(Property("cbom:knowledgeBase:version", kb));
+
+        if (m.AppliedConfig is { } ac)
+        {
+            props.Add(Property("cbom:config:suppressedByRule", ac.SuppressedByDisabledRule.ToString()));
+            props.Add(Property("cbom:config:suppressedByPath", ac.SuppressedByPathFilter.ToString()));
+            props.Add(Property("cbom:config:elevatedByDataSensitivity", ac.ElevatedByDataSensitivity.ToString()));
+            props.Add(Property("cbom:config:elevatedByPolicy", ac.ElevatedByPolicyProfile.ToString()));
+            if (ac.ConfiguredRuleIds.Count > 0)
+                props.Add(Property("cbom:config:configuredRules", string.Join(",", ac.ConfiguredRuleIds)));
+            if (ac.Waivers.Count > 0)
+                props.Add(Property("cbom:config:waivers", JsonSerializer.Serialize(ac.Waivers)));
+        }
+
+        return props;
     }
 
     private static List<object> BuildComponents(CbomDocument document)
@@ -123,15 +147,18 @@ public sealed class CycloneDxReporter : IReportRenderer
 
         if (finding.AssetType == CryptoAssetType.Algorithm)
         {
+            // CycloneDX constrains primitive/mode/padding to fixed enums. We map our richer internal values
+            // onto the closest valid enum (and keep the raw value in a cbom: property), so the BOM validates
+            // against the official 1.6 schema. nistQuantumSecurityLevel is clamped to the schema's 0..6 range.
             var algo = OmitNulls(new Dictionary<string, object?>
             {
-                ["primitive"] = finding.Primitive,
+                ["primitive"] = MapPrimitive(finding.Primitive),
                 ["parameterSetIdentifier"] = finding.KeySizeBits?.ToString(),
                 ["curve"] = finding.Curve,
-                ["mode"] = finding.Mode,
-                ["padding"] = finding.Padding,
+                ["mode"] = MapEnum(finding.Mode, ValidModes),
+                ["padding"] = MapEnum(finding.Padding, ValidPaddings),
                 ["classicalSecurityLevel"] = finding.ClassicalSecurityLevel,
-                ["nistQuantumSecurityLevel"] = finding.NistQuantumSecurityLevel,
+                ["nistQuantumSecurityLevel"] = ClampNist(finding.NistQuantumSecurityLevel),
             });
 
             if (algo.Count > 0)
@@ -187,6 +214,21 @@ public sealed class CycloneDxReporter : IReportRenderer
             Property("cbom:project", projectName),
         };
 
+        // Preserve our richer primitive vocabulary that the CycloneDX enum can't express.
+        if (finding.Primitive is { } prim)
+            properties.Add(Property("cbom:crypto:primitive", prim));
+
+        if (finding.Status != RemediationStatus.Unknown)
+            properties.Add(Property("cbom:remediation:status", finding.Status.ToString()));
+        if (finding.PolicyProfile is { } pp)
+            properties.Add(Property("cbom:policy:profile", pp));
+        if (finding.WaiverJustification is { } wj)
+            properties.Add(Property("cbom:waiver:justification", wj));
+        if (finding.WaiverApprover is { } wa)
+            properties.Add(Property("cbom:waiver:approver", wa));
+        if (finding.WaiverExpiry is { } we)
+            properties.Add(Property("cbom:waiver:expiry", we));
+
         if (finding.Recommendation.Options.Count > 0)
         {
             properties.Add(Property("cbom:recommendation:summary", finding.Recommendation.Summary));
@@ -200,6 +242,36 @@ public sealed class CycloneDxReporter : IReportRenderer
 
         return properties;
     }
+
+    private static readonly HashSet<string> ValidModes =
+        new(StringComparer.Ordinal) { "cbc", "ecb", "ccm", "gcm", "cfb", "ofb", "ctr", "other", "unknown" };
+
+    private static readonly HashSet<string> ValidPaddings =
+        new(StringComparer.Ordinal) { "pkcs5", "pkcs7", "pkcs1v15", "oaep", "raw", "other", "unknown" };
+
+    // Map our internal primitive vocabulary to the CycloneDX 1.6 `primitive` enum; null = omit the field.
+    private static string? MapPrimitive(string? primitive) => primitive?.ToLowerInvariant() switch
+    {
+        null => null,
+        "block-cipher" or "stream-cipher" or "hash" or "mac" or "kdf" or "signature"
+            or "kem" or "key-agree" or "drbg" or "ae" or "xof" or "combiner" or "other" or "unknown" => primitive,
+        "public-key" or "rsa" or "pke" => "pke",
+        "ecdsa" or "dsa" or "eddsa" => "signature",
+        "ecdh" or "dh" or "ec" => "key-agree",
+        "hmac" => "mac",
+        "rng" => "drbg",
+        _ => null,
+    };
+
+    private static string? MapEnum(string? value, HashSet<string> valid)
+    {
+        if (value is null)
+            return null;
+        string lower = value.ToLowerInvariant();
+        return valid.Contains(lower) ? lower : null;
+    }
+
+    private static int? ClampNist(int? level) => level is null ? null : Math.Clamp(level.Value, 0, 6);
 
     private static Dictionary<string, object?> Property(string name, string value) =>
         new() { ["name"] = name, ["value"] = value };

@@ -16,7 +16,31 @@ public sealed record ScanMetadata
 
     /// <summary>Number of projects that failed to load/compile. A failed project is "not analyzed," never "clean."</summary>
     public int ProjectsFailed { get; init; }
+
+    /// <summary>The policy profile in force for this scan (general | federal | cnsa2 | audit | developer).</summary>
+    public string PolicyProfile { get; init; } = "general";
+
+    /// <summary>Version of the algorithm knowledge base used, recorded for reproducibility.</summary>
+    public string? KnowledgeBaseVersion { get; init; }
+
+    /// <summary>Everything config/policy did to the raw findings, recorded so an auditor can see what was applied.</summary>
+    public AppliedConfigSummary? AppliedConfig { get; init; }
 }
+
+/// <summary>A transparent record of every config/policy action applied to the raw findings.</summary>
+public sealed record AppliedConfigSummary
+{
+    public int SuppressedByDisabledRule { get; init; }
+    public int SuppressedByPathFilter { get; init; }
+    public int ElevatedByDataSensitivity { get; init; }
+    public int ElevatedByPolicyProfile { get; init; }
+    public IReadOnlyList<WaiverRecord> Waivers { get; init; } = Array.Empty<WaiverRecord>();
+    public IReadOnlyList<string> ConfiguredRuleIds { get; init; } = Array.Empty<string>();
+}
+
+/// <summary>A recorded waiver. <paramref name="Suppressed"/> is false under the <c>audit</c> profile (annotate-only).</summary>
+public sealed record WaiverRecord(
+    string RuleId, string? Justification, string? Approver, string? Expiry, bool Suppressed, bool Expired, int Count);
 
 /// <summary>Per-project inventory.</summary>
 public sealed record ProjectInventory

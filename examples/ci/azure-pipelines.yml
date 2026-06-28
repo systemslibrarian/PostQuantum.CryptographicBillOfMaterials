@@ -1,0 +1,47 @@
+# Example: dotnet-cbom in Azure DevOps Pipelines, with the CBOM published as a build artifact and a
+# quantum-risk gate. Copy into azure-pipelines.yml (or a template) in your repository.
+trigger:
+  branches:
+    include: [main]
+pr:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  failOn: $[ eq(variables['Build.Reason'], 'PullRequest') ] # warn-only on PRs, gate on main
+
+steps:
+  - task: UseDotNet@2
+    inputs:
+      packageType: sdk
+      version: 8.0.x
+
+  - script: dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli
+    displayName: Install dotnet-cbom
+
+  - script: echo "##vso[task.prependpath]$HOME/.dotnet/tools"
+    displayName: Add tools to PATH
+
+  # On a PR, --fail-on none (report only). On main, gate on High+.
+  - script: |
+      if [ "$(Build.Reason)" = "PullRequest" ]; then GATE=none; else GATE=high; fi
+      dotnet-cbom scan ./YourSolution.sln \
+        --format cyclonedx,sarif,markdown,summary \
+        --output $(Build.ArtifactStagingDirectory)/cbom \
+        --profile general \
+        --fail-on "$GATE"
+    displayName: Scan crypto (CBOM)
+
+  - script: dotnet-cbom validate $(Build.ArtifactStagingDirectory)/cbom/cbom.cbom.json
+    displayName: Validate CBOM (CycloneDX 1.6 schema + profile)
+    condition: always()
+
+  - task: PublishBuildArtifacts@1
+    displayName: Publish CBOM
+    condition: always()
+    inputs:
+      pathToPublish: $(Build.ArtifactStagingDirectory)/cbom
+      artifactName: cbom

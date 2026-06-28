@@ -23,11 +23,14 @@ public sealed class DetectorRegistry
         new AsymmetricAlgorithmDetector(knowledgeBase),
         new HardcodedKeyDetector(knowledgeBase),
         new JwtSignatureValidationDetector(),
+        new JwtAlgorithmDetector(),
         new TlsProtocolDetector(),
         new CertificateValidationDetector(),
+        new CertificateInventoryDetector(),
         new KdfDetector(),
         new WeakRandomDetector(),
         new CloudKmsDetector(),
+        new BouncyCastleDetector(),
         new PqcPositiveDetector(knowledgeBase),
     });
 }

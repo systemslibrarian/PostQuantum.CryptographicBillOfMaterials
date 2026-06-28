@@ -56,4 +56,19 @@ public sealed record CryptoFinding
 
     /// <summary>Stable CycloneDX bom-ref (normalized location + symbol hash).</summary>
     public string? BomRef { get; init; }
+
+    /// <summary>Remediation lifecycle state (set by baseline diff and config waivers); drives audit reporting.</summary>
+    public RemediationStatus Status { get; init; } = RemediationStatus.Unknown;
+
+    /// <summary>Justification recorded when this finding is waived via config. Required for an audit-friendly waiver.</summary>
+    public string? WaiverJustification { get; init; }
+
+    /// <summary>Who approved the waiver (name/role), recorded from config.</summary>
+    public string? WaiverApprover { get; init; }
+
+    /// <summary>ISO date (yyyy-MM-dd) when the waiver expires, after which the finding re-activates.</summary>
+    public string? WaiverExpiry { get; init; }
+
+    /// <summary>The policy profile in force when this finding was scored (e.g., <c>cnsa2</c>).</summary>
+    public string? PolicyProfile { get; init; }
 }

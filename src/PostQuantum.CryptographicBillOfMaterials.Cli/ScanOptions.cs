@@ -33,4 +33,16 @@ internal sealed class ScanOptions
     /// <summary>Whether --fail-on / --format were set on the CLI (CLI overrides config).</summary>
     public bool FailOnSet { get; set; }
     public bool FormatsSet { get; set; }
+
+    /// <summary>Policy profile name from the CLI (--profile); overrides config. Null = use config/default.</summary>
+    public string? Profile { get; set; }
+
+    /// <summary>Restrict the scan to these repository-relative files (PR-aware incremental mode).</summary>
+    public List<string>? ChangedFiles { get; set; }
+
+    /// <summary>MSBuild restore behavior: null = default, true = --restore, false = --no-restore.</summary>
+    public bool? Restore { get; set; }
+
+    /// <summary>Extra MSBuild properties (name=value) to pass to the workspace loader.</summary>
+    public Dictionary<string, string> MsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

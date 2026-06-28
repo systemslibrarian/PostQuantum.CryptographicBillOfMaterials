@@ -15,32 +15,42 @@ and the CLI footer so a clean result is never mistaken for a clean system.
   factor in harvest-now-decrypt-later risk. Supply hints via `cbom.config.json` `dataSensitivityHints`.
 - **Actual deployment.** TLS may be terminated at a load balancer the code never references.
 
-## Current implementation status (v0.4)
+## Current implementation status
 
-The full detector list and bases are in [RULES.md](RULES.md). Implemented: 12 detectors (symmetric,
-asymmetric, ECB, hashes, JWT validation bypass, hardcoded keys/IVs, deprecated TLS, disabled cert
-validation, weak RNG, KDF, cloud-KMS inventory, PQC positive). Reporting: CycloneDX 1.6, SARIF 2.1.0,
-Markdown, HTML, executive summary, and CBOM **diff/baseline**. Plus `dotnet-cbom validate` (CycloneDX 1.6
-+ profile structural validation), `cbom.config.json` (waivers, raise-only severity floors, globs,
-`dataSensitivityHints`), and CI building with `-warnaserror`.
+The full detector list and bases are in [RULES.md](RULES.md). Implemented: **16 rules** — symmetric,
+asymmetric, AES-128-via-property, ECB, hashes, JWT validation bypass, **JWT alg=none / weak HMAC key**,
+hardcoded keys/IVs, deprecated TLS, disabled cert validation, **X.509 certificate inventory**, weak RNG
+(**context-elevated**), KDF, **cloud-KMS inventory + key-spec depth**, **Bouncy Castle inventory**,
+**package-manifest dependency inventory**, and PQC positive. Reporting: CycloneDX 1.6, SARIF 2.1.0,
+Markdown, HTML, executive summary, and CBOM **diff/baseline** — now as **audit packets** (top migration
+actions, what-changed-since-baseline, waivers). Plus `dotnet-cbom validate` against the **official
+CycloneDX 1.6 JSON Schema** + the `cbom:` profile; **policy profiles** (general/federal/cnsa2/audit/
+developer); `cbom.config.json` (waivers with justification/approver/expiry, raise-only severity floors,
+**per-algorithm** tuning, globs, path + **namespace** `dataSensitivityHints`); deterministic SourceLinked
+packaging; a **tool SBOM**; an official **GitHub Action** + Azure/GitLab examples; and CI that self-scans
+and schema-validates on every run.
+
+### Resolved (previously listed here)
+
+- **Full JSON-Schema validation** — now validates against the bundled official `bom-1.6.schema.json`
+  (+spdx/jsf) in `validate` and CI.
+- **AES key size via property** — `aes.KeySize = 128` is tracked (CBOM0003).
+- **JOSE `alg=none` literals + weak HMAC keys** — CBOM0022.
+- **Cloud KMS depth** — classical asymmetric KMS keys flagged (CBOM0070).
+- **Bouncy Castle / dependency-aware inventory** — CBOM0080 + CBOM0081 (package manifest).
+- **X.509 certificate inventory** — CBOM0042.
+- **Weak-RNG context** — elevated when material flows into keys/tokens/IVs/nonces (CBOM0050).
+- **Per-project load-failure reasons**, `--restore`/`--no-restore`/`--msbuild-property`.
+- **Per-algorithm rule granularity** — `rules.<id>.algorithms.<name>`.
+- **Supply chain** — tool SBOM, compatibility matrix, deterministic/SourceLinked pack, signing wired in
+  the release workflow.
 
 ### Remaining gaps in *this build* (not inherent)
 
-- **Full JSON-Schema validation.** `validate` checks CycloneDX 1.6 *structure* + the `cbom:` profile, not
-  the complete official `bom-1.6.schema.json` JSON-Schema draft. Full schema validation in CI is planned.
-- **AES key size via property.** `aes.KeySize = 128` is not yet tracked; only explicit constructor/factory
-  sizes flag AES-128 as reduced-margin. Planned: intra-method flow for `KeySize`/`GenerateKey`.
-- **JOSE/`alg=none` literals.** Detected via the validation-bypass flags, not raw `"none"` header strings;
-  weak HMAC key detection is not yet implemented.
-- **Cloud KMS depth.** Records *that* a managed KMS is used, not key specs / usages / rotation / region.
-- **No Bouncy Castle / dependency-aware inventory**, and **no X.509 certificate inventory** beyond
-  disabled validation / deprecated TLS.
-- **Weak-RNG context.** `System.Random` is flagged low everywhere; it is not yet elevated specifically
-  when random material flows into keys/tokens/IVs/nonces.
-- **MSBuild loader is best-effort.** `.sln/.csproj` use `MSBuildWorkspace`; on failure the tool falls back
-  to a no-MSBuild directory scan (BCL crypto resolves, but third-party symbols — Bouncy Castle,
-  `Microsoft.IdentityModel` — do not, so those detectors may not fire). Per-project target-framework
-  reporting is partial.
-- **Rule granularity.** Config toggles are per rule id (disabling `CBOM0010` suppresses all hash findings,
-  not just MD5). Per-algorithm tuning is not yet supported.
-- **Supply chain.** Signed NuGet package, tool SBOM, and a compatibility matrix are not yet published.
+- **Intra-method dataflow beyond `KeySize`.** IV/nonce/key *flow* tracking is heuristic (identifier-based),
+  not a full dataflow analysis.
+- **Cloud KMS region/account/rotation.** Captured only when statically visible; usually runtime config.
+- **No-MSBuild fallback.** Symbol-based third-party detectors may not fire without restored packages; the
+  package-manifest inventory (CBOM0081) mitigates this but does not replace per-call-site detection.
+- **NuGet publishing & signing are wired but not executed** — publishing to nuget.org and signing require a
+  maintainer's API key and code-signing certificate (supplied as CI secrets); see `.github/workflows/release.yml`.

@@ -1,0 +1,71 @@
+name: Release
+
+# Packs the dotnet-cbom global tool deterministically, signs the NuGet package (when a code-signing
+# certificate is configured as a secret), attaches a tool SBOM, and publishes to NuGet on a tag push.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    env:
+      ContinuousIntegrationBuild: "true"   # reproducible builds
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                     # SourceLink needs full history
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build & test
+        run: |
+          dotnet build CryptographicBillOfMaterials.slnx -c Release -warnaserror
+          dotnet test  CryptographicBillOfMaterials.slnx -c Release --no-build
+
+      - name: Pack tool
+        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Cli -c Release -o artifacts
+
+      - name: Generate tool SBOM
+        run: |
+          dotnet tool install --global CycloneDX
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet CycloneDX src/PostQuantum.CryptographicBillOfMaterials.Cli/PostQuantum.CryptographicBillOfMaterials.Cli.csproj \
+            -o artifacts -fn tool.cdx.json -F Json -spv 1.6 -rs -t
+
+      # Code signing — runs only when the signing secrets are present. NuGet package signing requires a
+      # code-signing certificate; supply it as base64 in CODE_SIGNING_PFX_BASE64 + CODE_SIGNING_PFX_PASSWORD.
+      - name: Sign NuGet package
+        if: ${{ env.CODE_SIGNING_PFX_BASE64 != '' }}
+        env:
+          CODE_SIGNING_PFX_BASE64: ${{ secrets.CODE_SIGNING_PFX_BASE64 }}
+          CODE_SIGNING_PFX_PASSWORD: ${{ secrets.CODE_SIGNING_PFX_PASSWORD }}
+        run: |
+          echo "$CODE_SIGNING_PFX_BASE64" | base64 -d > cert.pfx
+          for pkg in artifacts/*.nupkg; do
+            dotnet nuget sign "$pkg" \
+              --certificate-path cert.pfx \
+              --certificate-password "$CODE_SIGNING_PFX_PASSWORD" \
+              --timestamper http://timestamp.digicert.com
+          done
+          rm -f cert.pfx
+
+      - name: Publish to NuGet
+        if: ${{ startsWith(github.ref, 'refs/tags/') && env.NUGET_API_KEY != '' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: artifacts/

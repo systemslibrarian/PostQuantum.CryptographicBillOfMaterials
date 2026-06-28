@@ -8,6 +8,19 @@ public sealed class RuleConfig
 {
     public bool? Enabled { get; set; }
     public string? SeverityFloor { get; set; }
+
+    /// <summary>Per-algorithm overrides keyed by algorithm/display name (e.g., "MD5", "AES-128"), so a rule
+    /// can be tuned for one algorithm without disabling the whole rule id. Raise-only, like the rule floor.</summary>
+    public Dictionary<string, RuleConfig>? Algorithms { get; set; }
+
+    /// <summary>Why this rule/finding is waived. Required for a disabled rule to count as an auditable waiver.</summary>
+    public string? WaiverJustification { get; set; }
+
+    /// <summary>Who approved the waiver.</summary>
+    public string? WaiverApprover { get; set; }
+
+    /// <summary>ISO date (yyyy-MM-dd) the waiver expires; an expired waiver no longer suppresses.</summary>
+    public string? WaiverExpiry { get; set; }
 }
 
 /// <summary>
@@ -31,9 +44,17 @@ public sealed class CbomConfig
     public string[]? Exclude { get; set; }
     public string? FailOn { get; set; }
     public string[]? Formats { get; set; }
+
+    /// <summary>Built-in risk posture: general | federal | cnsa2 | audit | developer. CLI --profile overrides.</summary>
+    public string? Profile { get; set; }
+
     public Dictionary<string, RuleConfig>? Rules { get; set; }
 
-    /// <summary>Path-glob → sensitivity hint (e.g., "src/Payments/**": { dataLifetimeYears: 25 }).</summary>
+    /// <summary>
+    /// Path-glob → sensitivity hint (e.g., "src/Payments/**": { dataLifetimeYears: 25 }). Glob keys match the
+    /// finding's repository-relative path. Prefix a key with <c>ns:</c> to match the enclosing namespace
+    /// instead of the path (e.g., "ns:Contoso.Payments.*").
+    /// </summary>
     public Dictionary<string, DataSensitivityHint>? DataSensitivityHints { get; set; }
 
     /// <summary>Data lifetime (years) at/above which long-lived data elevates HNDL risk to Critical.</summary>

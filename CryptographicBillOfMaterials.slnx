@@ -6,6 +6,7 @@
     <Project Path="src/PostQuantum.CryptographicBillOfMaterials/PostQuantum.CryptographicBillOfMaterials.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Cli.Tests/PostQuantum.CryptographicBillOfMaterials.Cli.Tests.csproj" />
     <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Reporting.Tests/PostQuantum.CryptographicBillOfMaterials.Reporting.Tests.csproj" />
     <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Tests/PostQuantum.CryptographicBillOfMaterials.Tests.csproj" />
   </Folder>

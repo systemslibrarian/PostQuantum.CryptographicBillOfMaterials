@@ -12,7 +12,9 @@ internal sealed record ResolvedScan(string SolutionName, IReadOnlyList<LoadedPro
 /// </summary>
 internal static class TargetResolver
 {
-    public static async Task<ResolvedScan> ResolveAsync(string target, IList<string> diagnostics)
+    public static async Task<ResolvedScan> ResolveAsync(
+        string target, IList<string> diagnostics,
+        IReadOnlyDictionary<string, string>? msbuildProperties = null, bool? restore = null)
     {
         if (File.Exists(target))
         {
@@ -21,9 +23,13 @@ internal static class TargetResolver
 
             if (ext is ".sln" or ".slnx" or ".csproj")
             {
+                if (restore == true)
+                    RunRestore(target, diagnostics);
+
                 try
                 {
-                    IReadOnlyList<LoadedProject> loaded = await WorkspaceLoader.LoadAsync(target, diagnostics);
+                    IReadOnlyList<LoadedProject> loaded =
+                        await WorkspaceLoader.LoadAsync(target, diagnostics, msbuildProperties);
                     if (loaded.Any(p => p.Ok))
                         return new ResolvedScan(name, loaded);
 
@@ -77,4 +83,31 @@ internal static class TargetResolver
     private static bool HasSegment(string path, string segment) =>
         path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             .Any(s => string.Equals(s, segment, StringComparison.OrdinalIgnoreCase));
+
+    private static void RunRestore(string target, IList<string> diagnostics)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("dotnet", $"restore \"{target}\"")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            using System.Diagnostics.Process? p = System.Diagnostics.Process.Start(psi);
+            if (p is null)
+            {
+                diagnostics.Add("restore: could not start 'dotnet restore'.");
+                return;
+            }
+            p.WaitForExit();
+            diagnostics.Add(p.ExitCode == 0
+                ? "restore: completed."
+                : $"restore: 'dotnet restore' exited {p.ExitCode} (continuing; load may be partial).");
+        }
+        catch (Exception ex)
+        {
+            diagnostics.Add($"restore: failed to run 'dotnet restore' ({ex.Message}).");
+        }
+    }
 }

@@ -33,6 +33,7 @@ public sealed class ExecutiveSummaryReporter : IReportRenderer
         sb.AppendLine();
         sb.AppendLine($"**PQC Readiness: {score}/100** — {Interpret(score)}");
         sb.AppendLine();
+        sb.AppendLine($"- **Policy profile:** `{m.PolicyProfile}`");
         sb.AppendLine($"- **Critical findings:** {criticalCount}");
         sb.AppendLine($"- **High findings:** {highCount}");
 
@@ -43,10 +44,62 @@ public sealed class ExecutiveSummaryReporter : IReportRenderer
 
         sb.AppendLine($"- **Coverage:** Analyzed {m.ProjectsAnalyzed} of {totalProjects} projects");
         sb.AppendLine();
+
+        AppendTopActions(sb, document);
+        AppendWhatChanged(sb, document);
+        AppendWaivers(sb, document);
+
         sb.AppendLine(MarkdownReporter.Footer);
 
         using var writer = new StreamWriter(output, new UTF8Encoding(false), leaveOpen: true);
         writer.Write(sb.ToString());
+    }
+
+    private static void AppendTopActions(StringBuilder sb, CbomDocument document)
+    {
+        var actions = AuditInsights.TopActions(document, 3);
+        if (actions.Count == 0)
+            return;
+
+        sb.AppendLine("## Top migration actions");
+        sb.AppendLine();
+        int n = 1;
+        foreach (AuditInsights.MigrationAction a in actions)
+        {
+            sb.AppendLine($"{n}. **[{a.Level}] {a.Algorithm}** in `{a.Project}` ({a.Count}×, {a.RuleId}) — {a.Action}");
+            n++;
+        }
+        sb.AppendLine();
+    }
+
+    private static void AppendWhatChanged(StringBuilder sb, CbomDocument document)
+    {
+        if (!AuditInsights.HasRemediationStatus(document))
+            return;
+
+        sb.AppendLine("## What changed since baseline");
+        sb.AppendLine();
+        foreach ((RemediationStatus status, int count) in AuditInsights.StatusBreakdown(document))
+            sb.AppendLine($"- **{status}:** {count}");
+        sb.AppendLine();
+    }
+
+    private static void AppendWaivers(StringBuilder sb, CbomDocument document)
+    {
+        var waivers = document.Metadata.AppliedConfig?.Waivers;
+        if (waivers is null || waivers.Count == 0)
+            return;
+
+        sb.AppendLine("## Active waivers");
+        sb.AppendLine();
+        foreach (WaiverRecord w in waivers)
+        {
+            string expiry = w.Expired ? $"EXPIRED {w.Expiry}" : (w.Expiry ?? "no expiry");
+            string state = w.Suppressed ? "suppressed" : "annotated";
+            sb.AppendLine($"- **{w.RuleId}** ({w.Count}×, {state}, {expiry}) — "
+                + $"{w.Justification ?? "no justification"} (approver: {w.Approver ?? "unspecified"})");
+        }
+        sb.AppendLine();
     }
 
     private static string Interpret(int score) => score switch

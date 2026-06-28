@@ -1,5 +1,25 @@
 # What would make `dotnet-cbom` a 10/10 for people who need it
 
+## Delivered (status as of 2026-06-28)
+
+The 10 bars below have been substantially implemented. See [CHANGELOG.md](../CHANGELOG.md) for specifics.
+
+| Bar | Status | Evidence |
+|---|---|---|
+| 01. Trust mechanically verifiable | ✅ | Official CycloneDX 1.6 schema validation in `validate` + CI; profile validator; golden test |
+| 02. Coverage matrix + high-value gaps | ✅ | 16 rules incl. JWT alg=none/weak-HMAC, X.509, Bouncy Castle, package manifest, KMS depth, AES KeySize, weak-RNG context; [RULES.md](RULES.md) |
+| 03. Reports as audit packets | ✅ | Top migration actions, what-changed-since-baseline, remediation status, waivers |
+| 04. Policy profiles | ✅ | general/federal/cnsa2/audit/developer; recorded in metadata; raise-only |
+| 05. CI/PR first-class | ✅ | GitHub Action, Azure/GitLab examples, PR baseline-diff comment, `--changed-files`, exit codes |
+| 06. Config + data sensitivity | ✅ | `dataSensitivityHints` (path + `ns:` namespace) wired to scorer; per-algorithm rules; applied-config recorded |
+| 07. MSBuild/workspace hardening | ◑ | Per-project failure reasons, `--restore`/`--no-restore`/`--msbuild-property`; full dataflow still heuristic |
+| 08. Govern the knowledge base | ✅ | Per-rule matrix, citation-status table, [RULE-CHANGELOG.md](RULE-CHANGELOG.md), drift-guard tests |
+| 09. Determinism & portability | ✅ | Relative paths, deterministic serial/ordering, stable bom-refs, refreshed samples |
+| 10. Ship like audits depend on it | ◑ | Tool SBOM, compat matrix, accuracy page, deterministic/SourceLinked pack, signing **wired** (needs maintainer cert/key to execute) |
+
+The two ◑ items are limited only by things that need a maintainer secret (signing/publishing) or are an
+inherent static-analysis limit (full dataflow) — see [KNOWN-GAPS.md](KNOWN-GAPS.md).
+
 ## Short verdict
 
 This is already aimed at the right problem. The strongest parts are the honest framing, CycloneDX/SARIF orientation, fail-closed scan behavior, separate classical-vs-quantum risk model, and baseline/diff workflow. For early technical evaluators, I would put the current repo around a strong 7/10.
