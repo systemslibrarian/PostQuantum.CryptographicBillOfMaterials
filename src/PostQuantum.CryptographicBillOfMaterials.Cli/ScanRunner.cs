@@ -1,4 +1,6 @@
 using PostQuantum.CryptographicBillOfMaterials.Analysis.Engine;
+using PostQuantum.CryptographicBillOfMaterials.Configuration;
+using PostQuantum.CryptographicBillOfMaterials.Diff;
 using PostQuantum.CryptographicBillOfMaterials.Knowledge;
 using PostQuantum.CryptographicBillOfMaterials.Model;
 using PostQuantum.CryptographicBillOfMaterials.Reporting;
@@ -13,6 +15,17 @@ internal static class ScanRunner
     {
         string target = Path.GetFullPath(options.Target);
         var diagnostics = new List<string>();
+
+        CbomConfig? config = ConfigLoader.Load(options.ConfigPath, target, diagnostics);
+        if (config is not null)
+        {
+            if (!options.FailOnSet && config.FailOn is not null)
+                options.FailOn = Levels.ParseFailOn(config.FailOn);
+            if (!options.FormatsSet && config.Formats is { Length: > 0 })
+                options.Formats = config.Formats.ToList();
+        }
+
+        string baseDirectory = File.Exists(target) ? Path.GetDirectoryName(target) ?? "." : target;
 
         KnowledgeBase knowledgeBase = KnowledgeBase.LoadDefault();
         var engine = new ScanEngine(DetectorRegistry.CreateDefault(knowledgeBase));
@@ -49,13 +62,17 @@ internal static class ScanRunner
             foreach (ScanDiagnostic d in result.Diagnostics)
                 diagnostics.Add($"{lp.Name}/{d.Source}: {d.Message}");
 
-            ReadinessResult readiness = ReadinessCalculator.Calculate(result.Findings);
+            IReadOnlyList<CryptoFinding> findings =
+                FindingPostProcessor.Relativize(result.Findings, baseDirectory);
+            findings = ConfigApplication.Apply(findings, config, diagnostics);
+
+            ReadinessResult readiness = ReadinessCalculator.Calculate(findings);
             projects.Add(new ProjectInventory
             {
                 Name = lp.Name,
                 FilePath = lp.Path,
                 Analyzed = true,
-                Findings = result.Findings,
+                Findings = findings,
                 ReadinessScore = readiness.Score,
                 ReadinessTrivial = readiness.Trivial,
             });
@@ -84,11 +101,42 @@ internal static class ScanRunner
 
         Directory.CreateDirectory(options.OutputDir);
         WriteReports(document, options, diagnostics);
+        RunBaselineDiff(document, options, diagnostics);
 
         if (!options.Quiet)
             ConsoleSummary.Print(document, diagnostics, options);
 
         return ComputeExitCode(document, allFindings, options);
+    }
+
+    private static void RunBaselineDiff(CbomDocument current, ScanOptions options, List<string> diagnostics)
+    {
+        if (options.BaselinePath is null)
+            return;
+
+        try
+        {
+            using FileStream baselineStream = File.OpenRead(options.BaselinePath);
+            CbomDocument baseline = CbomReader.Read(baselineStream);
+            CbomDiff diff = DiffEngine.Compare(baseline, current);
+
+            string path = Path.Combine(options.OutputDir, "cbom.diff.md");
+            using (FileStream diffStream = File.Create(path))
+                DiffReporter.Render(diff, diffStream);
+
+            if (!options.Quiet)
+            {
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"Baseline: quantum-vulnerable {diff.BaselineQuantumVulnerable} -> {diff.CurrentQuantumVulnerable}; "
+                    + $"readiness {diff.BaselineReadiness} -> {diff.CurrentReadiness}; "
+                    + $"resolved {diff.ResolvedCount}, new {diff.NewCount}, regressed {diff.RegressedCount}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            diagnostics.Add($"Baseline diff failed: {ex.Message}");
+        }
     }
 
     private static void WriteReports(CbomDocument document, ScanOptions options, List<string> diagnostics)

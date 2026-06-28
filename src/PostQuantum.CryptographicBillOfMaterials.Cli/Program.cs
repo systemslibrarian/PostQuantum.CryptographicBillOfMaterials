@@ -18,6 +18,7 @@ internal static class Program
             return args[0] switch
             {
                 "scan" => await ScanCommand(args[1..]),
+                "diff" => DiffCommand(args[1..]),
                 "version" or "--version" => PrintVersion(),
                 _ => Unknown(args[0]),
             };
@@ -47,9 +48,17 @@ internal static class Program
                     options.Formats = Next(args, ref i)
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .ToList();
+                    options.FormatsSet = true;
                     break;
                 case "--fail-on":
-                    options.FailOn = ParseFailOn(Next(args, ref i));
+                    options.FailOn = Levels.ParseFailOn(Next(args, ref i));
+                    options.FailOnSet = true;
+                    break;
+                case "--config":
+                    options.ConfigPath = Next(args, ref i);
+                    break;
+                case "--baseline":
+                    options.BaselinePath = Next(args, ref i);
                     break;
                 case "--allow-partial":
                     options.AllowPartial = true;
@@ -76,22 +85,67 @@ internal static class Program
         return await ScanRunner.RunAsync(options);
     }
 
+    private static int DiffCommand(string[] args)
+    {
+        string? baseline = null;
+        string? current = null;
+        string? output = null;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            string a = args[i];
+            switch (a)
+            {
+                case "-o":
+                case "--output":
+                    output = Next(args, ref i);
+                    break;
+                case "-h":
+                case "--help":
+                    Console.WriteLine("usage: dotnet-cbom diff <baseline.cbom.json> <current.cbom.json> [-o out.md]");
+                    return 0;
+                default:
+                    if (baseline is null) baseline = a;
+                    else current = a;
+                    break;
+            }
+        }
+
+        if (baseline is null || current is null)
+        {
+            Console.Error.WriteLine("usage: dotnet-cbom diff <baseline.cbom.json> <current.cbom.json> [-o out.md]");
+            return 3;
+        }
+
+        using FileStream baselineStream = File.OpenRead(baseline);
+        Model.CbomDocument baselineDoc = Reporting.CbomReader.Read(baselineStream);
+        using FileStream currentStream = File.OpenRead(current);
+        Model.CbomDocument currentDoc = Reporting.CbomReader.Read(currentStream);
+
+        Diff.CbomDiff diff = Diff.DiffEngine.Compare(baselineDoc, currentDoc);
+
+        if (output is not null)
+        {
+            using FileStream outputStream = File.Create(output);
+            Reporting.DiffReporter.Render(diff, outputStream);
+            Console.WriteLine($"Wrote {output}");
+        }
+        else
+        {
+            using Stream stdout = Console.OpenStandardOutput();
+            Reporting.DiffReporter.Render(diff, stdout);
+        }
+
+        // Exit 1 on regression so the diff can gate CI.
+        return diff.NoRegressions ? 0 : 1;
+    }
+
     private static string Next(string[] args, ref int i)
     {
         if (i + 1 >= args.Length)
             throw new ArgumentException($"Missing value for '{args[i]}'.");
         return args[++i];
     }
-
-    private static RiskLevel? ParseFailOn(string value) => value.ToLowerInvariant() switch
-    {
-        "critical" => RiskLevel.Critical,
-        "high" => RiskLevel.High,
-        "medium" => RiskLevel.Medium,
-        "low" => RiskLevel.Low,
-        "none" => null,
-        _ => RiskLevel.High,
-    };
 
     private static int PrintVersion()
     {
@@ -117,8 +171,9 @@ internal static class Program
               dotnet-cbom <command> [options]
 
             COMMANDS
-              scan <target>    Analyze a .sln/.csproj/directory and emit a CBOM.
-              version          Show tool, profile, and CycloneDX versions.
+              scan <target>          Analyze a .sln/.csproj/directory and emit a CBOM.
+              diff <base> <current>  Compare two CBOMs (progress / regression).
+              version                Show tool, profile, and CycloneDX versions.
 
             Run 'dotnet-cbom scan --help' for scan options.
             """);
@@ -140,6 +195,8 @@ internal static class Program
               -o, --output <dir>     Output directory (default: cbom-out)
               -f, --format <list>    Comma-separated: cyclonedx,sarif,markdown,summary (default: cyclonedx,summary)
                   --fail-on <level>  Min level that sets exit 1: critical|high|medium|low|none (default: high)
+                  --baseline <file>  Prior CBOM to diff against (writes cbom.diff.md)
+                  --config <file>    Path to cbom.config.json (else auto-discovered near target)
                   --allow-partial    Do not return exit 2 when some projects fail to load
               -q, --quiet            Suppress the console summary
               -h, --help             Show this help

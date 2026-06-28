@@ -8,7 +8,7 @@ namespace PostQuantum.CryptographicBillOfMaterials.Analysis.Detection;
 /// Builds stable CycloneDX bom-refs from a normalized (rule, algorithm, location) tuple plus a short hash,
 /// so findings can be matched across scans for baselining (TDD §5.3, §8.3 decision 4).
 /// </summary>
-internal static class BomRef
+public static class BomRef
 {
     public static string Create(string algorithm, SourceLocation location, string ruleId)
     {

@@ -23,4 +23,14 @@ internal sealed class ScanOptions
 
     public bool AllowPartial { get; set; }
     public bool Quiet { get; set; }
+
+    /// <summary>Explicit config path; if null, a cbom.config.json near the target is auto-discovered.</summary>
+    public string? ConfigPath { get; set; }
+
+    /// <summary>Prior CBOM to diff the current scan against.</summary>
+    public string? BaselinePath { get; set; }
+
+    /// <summary>Whether --fail-on / --format were set on the CLI (CLI overrides config).</summary>
+    public bool FailOnSet { get; set; }
+    public bool FormatsSet { get; set; }
 }
