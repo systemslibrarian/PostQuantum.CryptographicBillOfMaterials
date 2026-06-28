@@ -193,7 +193,7 @@ internal static class Program
 
             OPTIONS
               -o, --output <dir>     Output directory (default: cbom-out)
-              -f, --format <list>    Comma-separated: cyclonedx,sarif,markdown,summary (default: cyclonedx,summary)
+              -f, --format <list>    Comma-separated: cyclonedx,sarif,markdown,html,summary (default: cyclonedx,summary)
                   --fail-on <level>  Min level that sets exit 1: critical|high|medium|low|none (default: high)
                   --baseline <file>  Prior CBOM to diff against (writes cbom.diff.md)
                   --config <file>    Path to cbom.config.json (else auto-discovered near target)

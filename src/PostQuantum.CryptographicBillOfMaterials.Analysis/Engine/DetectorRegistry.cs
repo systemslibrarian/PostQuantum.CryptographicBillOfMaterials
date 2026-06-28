@@ -24,6 +24,9 @@ public sealed class DetectorRegistry
         new JwtSignatureValidationDetector(),
         new TlsProtocolDetector(),
         new CertificateValidationDetector(),
+        new KdfDetector(),
+        new WeakRandomDetector(),
+        new CloudKmsDetector(),
         new PqcPositiveDetector(knowledgeBase),
     });
 }

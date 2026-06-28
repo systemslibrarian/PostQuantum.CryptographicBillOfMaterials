@@ -1,0 +1,11 @@
+{
+  "// docs": "Example cbom.config.json. CLI flags override these; this overrides built-in defaults.",
+  "include": ["src/**"],
+  "exclude": ["**/*.Tests/**", "**/Generated/**", "**/obj/**", "**/bin/**"],
+  "failOn": "high",
+  "formats": ["cyclonedx", "sarif", "summary"],
+  "rules": {
+    "CBOM0050": { "enabled": false },
+    "CBOM0002": { "severityFloor": "critical" }
+  }
+}

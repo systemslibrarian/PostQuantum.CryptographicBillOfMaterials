@@ -147,6 +147,7 @@ internal static class ScanRunner
             ["sarif"] = new SarifReporter(),
             ["markdown"] = new MarkdownReporter(),
             ["summary"] = new ExecutiveSummaryReporter(),
+            ["html"] = new HtmlReporter(),
         };
 
         foreach (string format in options.Formats)
