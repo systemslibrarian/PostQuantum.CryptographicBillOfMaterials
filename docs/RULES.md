@@ -9,6 +9,7 @@ it is covered by tests. "Confidence" is the typical detection confidence for the
 |---|---|---|---|---|---|---|
 | **CBOM0001** | Symmetric | AES / 3DES / DES / RC2 usage | `Aes.Create()`, `new DESCryptoServiceProvider()` | AES-256 safe; AES-128 reduced; DES/3DES/RC2 reduced+broken/deprecated | Confirmed | FIPS 197; NIST SP 800-131A |
 | **CBOM0002** | Asymmetric | RSA / ECDSA / ECDH / DSA (Shor-broken); small RSA/DSA key sizes | `RSA.Create(2048)`, `ECDsa.Create()` | Vulnerable (Shor / HNDL) | Confirmed | NIST IR 8547 (draft); CNSA 2.0; SP 800-131A |
+| **CBOM0003** | Symmetric | Reduced-margin key size set via `KeySize` property | `aes.KeySize = 128` | Reduced margin (Grover) | Confirmed | FIPS 197; CNSA 2.0 |
 | **CBOM0007** | Symmetric | ECB cipher mode | `aes.Mode = CipherMode.ECB` | Not quantum (classical Broken) | Confirmed | NIST SP 800-38A |
 | **CBOM0010** | Hashing | MD5 / SHA-1 (broken) and SHA-2 inventory | `MD5.Create()`, `SHA384.HashData(..)` | Not quantum; MD5/SHA-1 classically broken | Confirmed | FIPS 180-4; SP 800-131A; RFC 6151 |
 | **CBOM0021** | JWT | Signature validation disabled (`alg=none` equivalent) | `RequireSignedTokens = false` | Not quantum (Broken) | High | RFC 8725; OWASP |

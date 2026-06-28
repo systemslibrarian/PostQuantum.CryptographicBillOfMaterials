@@ -28,7 +28,11 @@ internal static class ScanRunner
         string baseDirectory = File.Exists(target) ? Path.GetDirectoryName(target) ?? "." : target;
 
         KnowledgeBase knowledgeBase = KnowledgeBase.LoadDefault();
-        var engine = new ScanEngine(DetectorRegistry.CreateDefault(knowledgeBase));
+        var registry = DetectorRegistry.CreateDefault(knowledgeBase);
+        var engine = new ScanEngine(registry);
+
+        if (config is not null)
+            ValidateConfig(config, registry, diagnostics);
 
         ResolvedScan resolved;
         try
@@ -107,6 +111,28 @@ internal static class ScanRunner
             ConsoleSummary.Print(document, diagnostics, options);
 
         return ComputeExitCode(document, allFindings, options);
+    }
+
+    private static readonly HashSet<string> ValidFailOn =
+        new(StringComparer.OrdinalIgnoreCase) { "critical", "high", "medium", "low", "none" };
+
+    private static void ValidateConfig(CbomConfig config, DetectorRegistry registry, List<string> diagnostics)
+    {
+        var known = registry.Detectors.Select(d => d.Metadata.RuleId).ToHashSet(StringComparer.Ordinal);
+
+        if (config.Rules is not null)
+        {
+            foreach ((string id, RuleConfig rc) in config.Rules)
+            {
+                if (!known.Contains(id))
+                    diagnostics.Add($"config: unknown rule id '{id}'.");
+                if (rc.SeverityFloor is { } sf && Levels.ParseLevel(sf) is null)
+                    diagnostics.Add($"config: invalid severityFloor '{sf}' for rule '{id}'.");
+            }
+        }
+
+        if (config.FailOn is { } failOn && !ValidFailOn.Contains(failOn))
+            diagnostics.Add($"config: invalid failOn '{failOn}' (expected critical|high|medium|low|none).");
     }
 
     private static void RunBaselineDiff(CbomDocument current, ScanOptions options, List<string> diagnostics)

@@ -17,6 +17,7 @@ public sealed class DetectorRegistry
     public static DetectorRegistry CreateDefault(KnowledgeBase knowledgeBase) => new(new ICryptoDetector[]
     {
         new SymmetricCipherDetector(knowledgeBase),
+        new WeakKeySizeDetector(),
         new EcbModeDetector(knowledgeBase),
         new HashAlgorithmDetector(knowledgeBase),
         new AsymmetricAlgorithmDetector(knowledgeBase),
