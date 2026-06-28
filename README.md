@@ -43,6 +43,9 @@ dotnet-cbom scan ./src --format cyclonedx,sarif,html --fail-on critical
 # Show migration progress against a previous run
 dotnet-cbom scan ./src --baseline ./last.cbom.json
 dotnet-cbom diff ./last.cbom.json ./cbom-out/cbom.cbom.json
+
+# Verify a CBOM is valid CycloneDX 1.6 + conforms to the dotnet-cbom profile
+dotnet-cbom validate ./cbom-out/cbom.cbom.json
 ```
 
 ### Exit codes (CI-friendly, fail-closed)
@@ -53,6 +56,29 @@ dotnet-cbom diff ./last.cbom.json ./cbom-out/cbom.cbom.json
 | 1 | Findings at or above `--fail-on` (default `high`) |
 | 2 | Partial analysis — a project failed to load (never reported as "clean") |
 | 3 | Usage/config error · 4 internal error |
+
+## CI / GitHub Actions
+
+```yaml
+- uses: actions/setup-dotnet@v4
+  with: { dotnet-version: '8.0.x' }
+- name: Cryptographic Bill of Materials
+  run: |
+    dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli
+    dotnet-cbom scan ./src --format cyclonedx,sarif --fail-on critical \
+      --baseline ./.cbom/baseline.json -o ./.cbom/out
+- name: Upload SARIF to code scanning
+  if: always()
+  uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: ./.cbom/out/cbom.sarif }
+- name: Publish CBOM artifact
+  if: always()
+  uses: actions/upload-artifact@v4
+  with: { name: cbom, path: ./.cbom/out }
+```
+
+Start at `--fail-on critical` and ratchet down as the inventory matures; SARIF lights up GitHub code
+scanning while the CBOM artifact feeds Dependency-Track or an auditor.
 
 ## How risk and readiness are computed (transparent)
 

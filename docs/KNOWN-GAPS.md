@@ -15,27 +15,32 @@ and the CLI footer so a clean result is never mistaken for a clean system.
   factor in harvest-now-decrypt-later risk. Supply hints via `cbom.config.json` `dataSensitivityHints`.
 - **Actual deployment.** TLS may be terminated at a load balancer the code never references.
 
-## Current implementation limitations (v0.3)
+## Current implementation status (v0.4)
 
-These are gaps in *this build*, scheduled for later turns; they are not inherent.
+The full detector list and bases are in [RULES.md](RULES.md). Implemented: 12 detectors (symmetric,
+asymmetric, ECB, hashes, JWT validation bypass, hardcoded keys/IVs, deprecated TLS, disabled cert
+validation, weak RNG, KDF, cloud-KMS inventory, PQC positive). Reporting: CycloneDX 1.6, SARIF 2.1.0,
+Markdown, HTML, executive summary, and CBOM **diff/baseline**. Plus `dotnet-cbom validate` (CycloneDX 1.6
++ profile structural validation), `cbom.config.json` (waivers, raise-only severity floors, globs,
+`dataSensitivityHints`), and CI building with `-warnaserror`.
 
-- **AES key size set via property.** `aes.KeySize = 128` is not yet tracked, so AES-128 is flagged
-  reduced-margin only when the size is an explicit constructor/factory argument (rare in the BCL).
-  Planned: lightweight intra-method flow to associate `KeySize`/`GenerateKey` with the instance.
-- **MSBuild loader is best-effort.** `.sln/.csproj` use `MSBuildWorkspace`; on failure the tool falls
-  back to a no-MSBuild directory scan (BCL crypto still resolves, but project-reference/NuGet symbols —
-  e.g., Bouncy Castle, `Microsoft.IdentityModel` JWT types — do not, so those detectors may not fire in
-  fallback mode). Per-project target-framework reporting is partial.
-- **Detector coverage is growing but incomplete.** Implemented: symmetric ciphers, ECB mode, hashes,
-  RSA/ECDSA/ECDH/DSA, hardcoded keys/IVs, JWT signature-validation-disabled, deprecated TLS, disabled
-  cert validation, PQC positive signals. Not yet: full JOSE/`alg=none` literal handling, KDFs (PBKDF2
-  iteration thresholds), cloud KMS inventory, non-CSPRNG, Bouncy Castle.
-- **Rule granularity.** Config rule toggles are per detector rule id, so disabling the hash rule
-  (`CBOM0010`) suppresses *all* hash findings (e.g., MD5 and SHA-384 together). Per-algorithm severity
-  tuning is not yet supported.
-- **Reporting:** CycloneDX 1.6, SARIF 2.1.0, Markdown, executive summary, and the CBOM **diff/baseline**
-  are implemented. Not yet: HTML report.
-- **CycloneDX schema validation** against the official `bom-1.6.schema.json` is not yet run in CI (CI
-  currently builds with `-warnaserror` and runs all tests). Structural assertions exist in unit tests.
-- **`dataSensitivityHints`** (long-lived-data weighting for harvest-now-decrypt-later) is designed
-  (TDD §6.7) but not yet honored by the scorer.
+### Remaining gaps in *this build* (not inherent)
+
+- **Full JSON-Schema validation.** `validate` checks CycloneDX 1.6 *structure* + the `cbom:` profile, not
+  the complete official `bom-1.6.schema.json` JSON-Schema draft. Full schema validation in CI is planned.
+- **AES key size via property.** `aes.KeySize = 128` is not yet tracked; only explicit constructor/factory
+  sizes flag AES-128 as reduced-margin. Planned: intra-method flow for `KeySize`/`GenerateKey`.
+- **JOSE/`alg=none` literals.** Detected via the validation-bypass flags, not raw `"none"` header strings;
+  weak HMAC key detection is not yet implemented.
+- **Cloud KMS depth.** Records *that* a managed KMS is used, not key specs / usages / rotation / region.
+- **No Bouncy Castle / dependency-aware inventory**, and **no X.509 certificate inventory** beyond
+  disabled validation / deprecated TLS.
+- **Weak-RNG context.** `System.Random` is flagged low everywhere; it is not yet elevated specifically
+  when random material flows into keys/tokens/IVs/nonces.
+- **MSBuild loader is best-effort.** `.sln/.csproj` use `MSBuildWorkspace`; on failure the tool falls back
+  to a no-MSBuild directory scan (BCL crypto resolves, but third-party symbols — Bouncy Castle,
+  `Microsoft.IdentityModel` — do not, so those detectors may not fire). Per-project target-framework
+  reporting is partial.
+- **Rule granularity.** Config toggles are per rule id (disabling `CBOM0010` suppresses all hash findings,
+  not just MD5). Per-algorithm tuning is not yet supported.
+- **Supply chain.** Signed NuGet package, tool SBOM, and a compatibility matrix are not yet published.

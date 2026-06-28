@@ -19,6 +19,7 @@ internal static class Program
             {
                 "scan" => await ScanCommand(args[1..]),
                 "diff" => DiffCommand(args[1..]),
+                "validate" => ValidateCommand(args[1..]),
                 "version" or "--version" => PrintVersion(),
                 _ => Unknown(args[0]),
             };
@@ -140,6 +141,35 @@ internal static class Program
         return diff.NoRegressions ? 0 : 1;
     }
 
+    private static int ValidateCommand(string[] args)
+    {
+        if (args.Length == 0 || args[0] is "-h" or "--help")
+        {
+            Console.WriteLine("usage: dotnet-cbom validate <cbom.cbom.json>");
+            return args.Length == 0 ? 3 : 0;
+        }
+
+        string path = args[0];
+        if (!File.Exists(path))
+        {
+            Console.Error.WriteLine($"error: file not found: {path}");
+            return 3;
+        }
+
+        using FileStream stream = File.OpenRead(path);
+        Reporting.ValidationResult result = Reporting.CbomValidator.Validate(stream);
+
+        foreach (Reporting.ValidationIssue issue in result.Issues)
+            Console.WriteLine($"  {issue.Severity,-7} {issue.Location}  {issue.Message}");
+
+        Console.WriteLine();
+        Console.WriteLine(result.IsValid
+            ? $"VALID — CycloneDX 1.6 + dotnet-cbom profile ({result.WarningCount} warning(s))."
+            : $"INVALID — {result.ErrorCount} error(s), {result.WarningCount} warning(s).");
+
+        return result.IsValid ? 0 : 1;
+    }
+
     private static string Next(string[] args, ref int i)
     {
         if (i + 1 >= args.Length)
@@ -173,6 +203,7 @@ internal static class Program
             COMMANDS
               scan <target>          Analyze a .sln/.csproj/directory and emit a CBOM.
               diff <base> <current>  Compare two CBOMs (progress / regression).
+              validate <cbom.json>   Check a CBOM against CycloneDX 1.6 + the dotnet-cbom profile.
               version                Show tool, profile, and CycloneDX versions.
 
             Run 'dotnet-cbom scan --help' for scan options.

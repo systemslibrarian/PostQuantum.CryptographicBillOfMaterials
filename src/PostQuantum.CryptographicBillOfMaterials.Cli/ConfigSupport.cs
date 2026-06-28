@@ -115,6 +115,7 @@ internal static class ConfigApplication
         var kept = new List<CryptoFinding>(findings.Count);
         int disabledSuppressed = 0;
         int pathSuppressed = 0;
+        int elevatedByData = 0;
 
         foreach (CryptoFinding f in findings)
         {
@@ -149,6 +150,14 @@ internal static class ConfigApplication
                 outFinding = f with { RiskLevel = floor };
             }
 
+            // Harvest-now-decrypt-later: long-lived confidentiality protected by quantum-vulnerable
+            // crypto is elevated to Critical. Data lifetime comes from dataSensitivityHints (TDD §6.7).
+            if (IsLongLivedQuantumExposure(outFinding, config) && outFinding.RiskLevel < RiskLevel.Critical)
+            {
+                outFinding = outFinding with { RiskLevel = RiskLevel.Critical };
+                elevatedByData++;
+            }
+
             kept.Add(outFinding);
         }
 
@@ -156,7 +165,29 @@ internal static class ConfigApplication
             diagnostics.Add($"config: {disabledSuppressed} finding(s) suppressed by disabled rules (recorded waiver).");
         if (pathSuppressed > 0)
             diagnostics.Add($"config: {pathSuppressed} finding(s) suppressed by include/exclude filters.");
+        if (elevatedByData > 0)
+            diagnostics.Add($"config: {elevatedByData} finding(s) elevated to Critical by data-sensitivity (long-lived HNDL exposure).");
 
         return kept;
+    }
+
+    private static bool IsLongLivedQuantumExposure(CryptoFinding f, CbomConfig config)
+    {
+        if (config.DataSensitivityHints is null || config.DataSensitivityHints.Count == 0)
+            return false;
+        if (f.QuantumVulnerability != QuantumVulnerability.Vulnerable)
+            return false;
+        if (f.UsageContext is not (UsageContext.AtRest or UsageContext.InTransit or UsageContext.KeyExchange))
+            return false;
+
+        foreach ((string glob, DataSensitivityHint hint) in config.DataSensitivityHints)
+        {
+            if ((hint.DataLifetimeYears ?? 0) >= CbomConfig.LongLivedYearsThreshold
+                && GlobMatcher.IsMatch(f.Location.FilePath, glob))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }

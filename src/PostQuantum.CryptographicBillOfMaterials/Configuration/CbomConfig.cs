@@ -15,6 +15,16 @@ public sealed class RuleConfig
 /// takes precedence over built-in defaults. Disabling a rule is an explicit, recorded waiver — never a
 /// silent drop (the scan reports how many findings were suppressed).
 /// </summary>
+/// <summary>
+/// A data-sensitivity hint for a set of paths (glob keys), used to weight harvest-now-decrypt-later risk.
+/// Long-lived confidentiality protected by quantum-vulnerable crypto is the highest-urgency PQC work.
+/// </summary>
+public sealed class DataSensitivityHint
+{
+    public int? DataLifetimeYears { get; set; }
+    public string? DataClass { get; set; }
+}
+
 public sealed class CbomConfig
 {
     public string[]? Include { get; set; }
@@ -22,6 +32,12 @@ public sealed class CbomConfig
     public string? FailOn { get; set; }
     public string[]? Formats { get; set; }
     public Dictionary<string, RuleConfig>? Rules { get; set; }
+
+    /// <summary>Path-glob → sensitivity hint (e.g., "src/Payments/**": { dataLifetimeYears: 25 }).</summary>
+    public Dictionary<string, DataSensitivityHint>? DataSensitivityHints { get; set; }
+
+    /// <summary>Data lifetime (years) at/above which long-lived data elevates HNDL risk to Critical.</summary>
+    public const int LongLivedYearsThreshold = 10;
 
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     {

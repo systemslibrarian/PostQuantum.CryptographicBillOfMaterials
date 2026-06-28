@@ -7,5 +7,8 @@
   "rules": {
     "CBOM0050": { "enabled": false },
     "CBOM0002": { "severityFloor": "critical" }
+  },
+  "dataSensitivityHints": {
+    "src/Payments/**": { "dataLifetimeYears": 25, "dataClass": "financial" }
   }
 }
