@@ -87,6 +87,69 @@ internal static class FindingFactory
         };
     }
 
+    /// <summary>
+    /// Build a finding for a configuration/usage issue that is not backed by a knowledge-base algorithm
+    /// entry (e.g., JWT signature validation disabled, deprecated TLS, disabled cert validation).
+    /// </summary>
+    public static CryptoFinding Create(
+        DetectorMetadata meta,
+        DetectionContext ctx,
+        SyntaxNode locationNode,
+        string displayName,
+        QuantumVulnerability quantumVulnerability,
+        ClassicalWeakness classicalWeakness,
+        UsageContext usage,
+        DetectionConfidence confidence,
+        string basis,
+        Recommendation recommendation,
+        RiskLevel? floor = null,
+        CryptoAssetType assetType = CryptoAssetType.Algorithm,
+        DetectionMethod method = DetectionMethod.Symbol,
+        string? primitive = null)
+    {
+        RiskLevel? effectiveFloor = floor;
+        if (effectiveFloor is null && classicalWeakness == ClassicalWeakness.Broken)
+            effectiveFloor = RiskLevel.High;
+        if (effectiveFloor is null && IsLongLivedConfidentiality(quantumVulnerability, usage))
+            effectiveFloor = RiskLevel.High;
+
+        RiskResult risk = RiskEngine.Evaluate(
+            new RiskInput(quantumVulnerability, classicalWeakness, usage, confidence, effectiveFloor));
+
+        QuantumThreat threat = quantumVulnerability switch
+        {
+            QuantumVulnerability.Vulnerable => QuantumThreat.Shor,
+            QuantumVulnerability.ReducedMargin => QuantumThreat.Grover,
+            _ => QuantumThreat.None,
+        };
+        if (IsLongLivedConfidentiality(quantumVulnerability, usage))
+            threat = QuantumThreat.HarvestNowDecryptLater;
+
+        SourceLocation location = ctx.LocationOf(locationNode);
+
+        return new CryptoFinding
+        {
+            RuleId = meta.RuleId,
+            Title = meta.Title,
+            Category = meta.Category,
+            AssetType = assetType,
+            AlgorithmName = displayName,
+            Primitive = primitive,
+            QuantumVulnerability = quantumVulnerability,
+            QuantumThreat = threat,
+            ClassicalWeakness = classicalWeakness,
+            UsageContext = usage,
+            Confidence = confidence,
+            DetectionMethod = method,
+            RiskLevel = risk.Level,
+            RiskScore = risk.Score,
+            RiskBasis = basis,
+            Recommendation = recommendation,
+            Location = location,
+            BomRef = BomRef.Create(displayName, location, meta.RuleId),
+        };
+    }
+
     private static bool IsLongLivedConfidentiality(QuantumVulnerability qv, UsageContext usage) =>
         qv == QuantumVulnerability.Vulnerable
         && usage is UsageContext.AtRest or UsageContext.InTransit or UsageContext.KeyExchange;

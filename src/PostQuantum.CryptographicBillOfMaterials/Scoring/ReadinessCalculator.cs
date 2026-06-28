@@ -25,10 +25,16 @@ public static class ReadinessCalculator
         _ => 0.0,
     };
 
-    /// <summary>A finding counts toward readiness only if it represents a quantum-relevant algorithm or protocol.</summary>
+    /// <summary>
+    /// A finding counts toward readiness only if it represents a quantum-relevant algorithm/protocol.
+    /// Classical-only or configuration findings (cipher-mode misuse, hardcoded secrets, JWT/TLS config,
+    /// weak randomness) are reported separately and excluded so they neither help nor hurt the PQC score.
+    /// </summary>
     public static bool IsQuantumRelevant(CryptoFinding f) =>
         f.AssetType is CryptoAssetType.Algorithm or CryptoAssetType.Protocol
-        && f.Primitive != "block-cipher-mode";
+        && f.Primitive != "block-cipher-mode"
+        && f.Category is not (RuleCategory.Jwt or RuleCategory.Tls
+            or RuleCategory.HardcodedSecret or RuleCategory.Randomness);
 
     /// <summary>Compute the readiness score for a set of findings.</summary>
     public static ReadinessResult Calculate(IEnumerable<CryptoFinding> findings)

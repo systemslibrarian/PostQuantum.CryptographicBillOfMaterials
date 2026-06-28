@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>PostQuantum.CryptographicBillOfMaterials.Reporting</RootNamespace>
+    <AssemblyName>PostQuantum.CryptographicBillOfMaterials.Reporting</AssemblyName>
+    <PackageId>PostQuantum.CryptographicBillOfMaterials.Reporting</PackageId>
+    <Description>Report renderers for the Cryptographic Bill of Materials (CBOM): CycloneDX 1.6 JSON, SARIF 2.1.0, and Markdown output.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PostQuantum.CryptographicBillOfMaterials\PostQuantum.CryptographicBillOfMaterials.csproj" />
+  </ItemGroup>
+
+</Project>

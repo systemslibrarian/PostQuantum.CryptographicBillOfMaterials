@@ -21,5 +21,9 @@ public sealed class DetectorRegistry
         new HashAlgorithmDetector(knowledgeBase),
         new AsymmetricAlgorithmDetector(knowledgeBase),
         new HardcodedKeyDetector(knowledgeBase),
+        new JwtSignatureValidationDetector(),
+        new TlsProtocolDetector(),
+        new CertificateValidationDetector(),
+        new PqcPositiveDetector(knowledgeBase),
     });
 }

@@ -40,6 +40,19 @@ public abstract class DetectorBase : ICryptoDetector
     protected static string FullName(ITypeSymbol type) =>
         type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
 
+    /// <summary>
+    /// Resolves the target of an assignment to (the left node, member name), handling BOTH
+    /// <c>obj.Member = ...</c> (member access) and <c>new T { Member = ... }</c> (object-initializer
+    /// identifier) forms. Returns null for indexers and other unsupported left-hand sides.
+    /// </summary>
+    protected static (SyntaxNode LeftNode, string MemberName)? AssignmentTarget(AssignmentExpressionSyntax assignment) =>
+        assignment.Left switch
+        {
+            MemberAccessExpressionSyntax m => (assignment.Left, m.Name.Identifier.ValueText),
+            IdentifierNameSyntax id => (assignment.Left, id.Identifier.ValueText),
+            _ => null,
+        };
+
     /// <summary>First integer constant argument to the call/constructor at this node, if any (e.g., RSA key size).</summary>
     protected static int? FirstIntArgument(DetectionContext ctx)
     {

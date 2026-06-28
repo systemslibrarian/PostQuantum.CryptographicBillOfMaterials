@@ -25,17 +25,17 @@ internal sealed class HardcodedKeyDetector : DetectorBase
     public override void Inspect(DetectionContext ctx)
     {
         var assignment = (AssignmentExpressionSyntax)ctx.Node;
-        if (assignment.Left is not MemberAccessExpressionSyntax left)
+        if (AssignmentTarget(assignment) is not { } target)
             return;
 
-        string member = left.Name.Identifier.ValueText;
+        string member = target.MemberName;
         bool isKey = member == "Key";
         bool isIv = member == "IV";
         if (!isKey && !isIv)
             return;
 
         // Confirm the target is a byte[] crypto property (e.g., SymmetricAlgorithm.Key / .IV).
-        if (ctx.SemanticModel.GetSymbolInfo(left).Symbol is not IPropertySymbol prop)
+        if (ctx.SemanticModel.GetSymbolInfo(target.LeftNode).Symbol is not IPropertySymbol prop)
             return;
         if (prop.Type is not IArrayTypeSymbol array || array.ElementType.SpecialType != SpecialType.System_Byte)
             return;
