@@ -286,6 +286,7 @@ internal static class ScanRunner
             ["sarif"] = new SarifReporter(),
             ["markdown"] = new MarkdownReporter(),
             ["summary"] = new ExecutiveSummaryReporter(),
+            ["json-summary"] = new JsonSummaryReporter(),
             ["html"] = new HtmlReporter(),
         };
 
