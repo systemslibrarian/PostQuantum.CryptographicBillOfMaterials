@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write          # required for NuGet trusted publishing (OIDC)
 
 jobs:
   pack:
@@ -31,8 +32,12 @@ jobs:
           dotnet build CryptographicBillOfMaterials.slnx -c Release -warnaserror
           dotnet test  CryptographicBillOfMaterials.slnx -c Release --no-build
 
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Pack tool
-        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Cli -c Release -o artifacts
+        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Cli -c Release -o artifacts -p:Version=${{ steps.ver.outputs.version }}
 
       - name: Generate tool SBOM
         run: |
@@ -58,11 +63,18 @@ jobs:
           done
           rm -f cert.pfx
 
+      # Trusted publishing: exchange the GitHub OIDC token for a short-lived NuGet API key.
+      # No long-lived NUGET_API_KEY secret needed — the trust policy on nuget.org authorizes this repo.
+      - name: NuGet login (trusted publishing)
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: systemslibrarian          # nuget.org account that owns the trust policy
+
       - name: Publish to NuGet
-        if: ${{ startsWith(github.ref, 'refs/tags/') && env.NUGET_API_KEY != '' }}
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: dotnet nuget push "artifacts/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4

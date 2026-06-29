@@ -15,8 +15,8 @@
     <Authors>systemslibrarian</Authors>
     <Company>PostQuantum</Company>
     <Product>PostQuantum.CryptographicBillOfMaterials</Product>
-    <PackageProjectUrl>https://github.com/systemslibrarian/CryptographicBillOfMaterials</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/systemslibrarian/CryptographicBillOfMaterials</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <Copyright>Copyright (c) systemslibrarian</Copyright>
   </PropertyGroup>
