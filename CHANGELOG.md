@@ -5,6 +5,28 @@ All notable changes to `dotnet-cbom` are recorded here. Format follows
 
 ## [Unreleased]
 
+### Fixed — correctness & misuse-resistance
+- **Fail-closed config loading.** A present-but-unparseable `cbom.config.json` (or a missing `--config`) is now
+  fatal (exit 3) instead of silently reverting to defaults and dropping a severity floor. See
+  [ADR 0001](docs/adr/0001-fail-closed-config-and-justified-waivers.md).
+- **Justified-only waivers.** Disabling a rule now suppresses findings only with a `waiverJustification` and an
+  unexpired `waiverExpiry`; otherwise the finding is retained and flagged. No more silent suppression.
+- **Glob `**/` boundary bug.** `**/Crypto.cs` no longer over-matches `src/NotCrypto.cs` (was translated to a
+  non-boundary-anchored `.*`). This previously could over-suppress findings.
+- **`diff` argument handling.** A third positional file is now a usage error (exit 3) instead of silently
+  diffing the wrong pair.
+
+### Changed — analysis depth
+- **CBOM0050 now uses real intra-method taint analysis** (`CryptoTaintAnalysis`) instead of identifier-name
+  heuristics: it tracks `System.Random`/`Random.Shared` output through local assignments and buffer fills into
+  `.Key`/`.IV`/`.Nonce` (and HMAC/SymmetricSecurityKey) sinks. Catches name-independent flows; removes the
+  `keyboard`-style false positive. Adds `Random.Shared` as a source. See
+  [ADR 0002](docs/adr/0002-intra-method-taint-for-key-material.md).
+
+### Added — testing
+- Golden regression test locking the `VulnerableDemo` finding set; end-to-end `ScanRunner` tests (exit codes,
+  fail-closed config, partial-scan exit 2); parallel-scan determinism test; `GlobMatcher` boundary tests.
+
 ### Added — detection coverage
 - **CBOM0022** — unsigned/weak-keyed JWT algorithms: `alg=none` (raw literal and `SecurityAlgorithms.None`)
   and HMAC signing keys that are hardcoded or shorter than the 256-bit HS256 minimum (RFC 8725, RFC 7518).

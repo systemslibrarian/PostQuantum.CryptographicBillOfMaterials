@@ -123,8 +123,19 @@ internal static class Program
                     Console.WriteLine("usage: dotnet-cbom diff <baseline.cbom.json> <current.cbom.json> [-o out.md]");
                     return 0;
                 default:
+                    if (a.StartsWith('-'))
+                    {
+                        Console.Error.WriteLine($"Unknown option '{a}'.");
+                        return 3;
+                    }
                     if (baseline is null) baseline = a;
-                    else current = a;
+                    else if (current is null) current = a;
+                    else
+                    {
+                        // Don't silently diff the wrong pair when too many files are supplied.
+                        Console.Error.WriteLine($"error: unexpected extra argument '{a}'.");
+                        return 3;
+                    }
                     break;
             }
         }

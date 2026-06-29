@@ -89,6 +89,20 @@ public class ConfigApplicationTests
     }
 
     [Fact]
+    public void UnjustifiedWaiver_RetainsFinding_NeverSilentlySuppresses()
+    {
+        // Misuse-resistance: disabling a rule WITHOUT a justification must not drop the finding.
+        var config = new CbomConfig { Rules = new() { ["CBOM0010"] = new RuleConfig { Enabled = false } } };
+        var result = Apply(new[] { Finding("CBOM0010", "MD5", RiskLevel.High) }, config, "general");
+
+        CryptoFinding kept = Assert.Single(result.Findings);
+        Assert.Equal(RiskLevel.High, kept.RiskLevel);
+        Assert.NotEqual(RemediationStatus.Waived, kept.Status);
+        Assert.Equal(0, result.Summary.SuppressedByDisabledRule);
+        Assert.False(Assert.Single(result.Summary.Waivers).Suppressed);
+    }
+
+    [Fact]
     public void ExpiredWaiver_ReactivatesFinding()
     {
         var config = new CbomConfig

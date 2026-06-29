@@ -155,6 +155,71 @@ public class WaveADetectorTests
         Assert.True(f.RiskLevel <= RiskLevel.Low);
     }
 
+    [Fact]
+    public void ElevatesSystemRandom_ViaBufferDataflow_WithNoSensitiveNames()
+    {
+        // Proves real dataflow: no variable/method is named like a secret, yet the tainted buffer
+        // reaches aes.Key. The old identifier heuristic would have missed this.
+        const string src = """
+            using System.Security.Cryptography;
+            public class C
+            {
+                public void Configure()
+                {
+                    var data = new byte[16];
+                    new System.Random().NextBytes(data);
+                    var aes = Aes.Create();
+                    aes.Key = data;
+                }
+            }
+            """;
+
+        CryptoFinding f = Assert.Single(Scan(src), x => x.RuleId == "CBOM0050");
+        Assert.True(f.RiskLevel >= RiskLevel.High);
+        Assert.Equal(ClassicalWeakness.Broken, f.ClassicalWeakness);
+    }
+
+    [Fact]
+    public void DoesNotFlagSystemRandom_WhenNameLooksSensitiveButNoFlow()
+    {
+        // 'keyboardLayout' contains "key" but the value never reaches a crypto sink: must NOT elevate
+        // (the false positive the identifier heuristic produced).
+        const string src = """
+            public class C
+            {
+                public int Configure()
+                {
+                    var keyboardLayout = new System.Random();
+                    return keyboardLayout.Next();
+                }
+            }
+            """;
+
+        CryptoFinding f = Assert.Single(Scan(src), x => x.RuleId == "CBOM0050");
+        Assert.True(f.RiskLevel <= RiskLevel.Low);
+    }
+
+    [Fact]
+    public void ElevatesRandomShared_FlowingIntoKey()
+    {
+        const string src = """
+            using System.Security.Cryptography;
+            public class C
+            {
+                public void Init()
+                {
+                    var buf = new byte[32];
+                    System.Random.Shared.NextBytes(buf);
+                    var aes = Aes.Create();
+                    aes.Key = buf;
+                }
+            }
+            """;
+
+        CryptoFinding f = Assert.Single(Scan(src), x => x.RuleId == "CBOM0050");
+        Assert.True(f.RiskLevel >= RiskLevel.High);
+    }
+
     // ---- CBOM0070: KMS depth ----
 
     [Fact]

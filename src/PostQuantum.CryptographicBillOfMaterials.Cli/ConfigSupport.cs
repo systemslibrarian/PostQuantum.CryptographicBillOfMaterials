@@ -49,14 +49,23 @@ internal static class GlobMatcher
             {
                 if (i + 1 < pattern.Length && pattern[i + 1] == '*')
                 {
-                    sb.Append(".*");
-                    i++;
+                    i++; // consume the second '*'
                     if (i + 1 < pattern.Length && pattern[i + 1] == '/')
-                        i++;
+                    {
+                        // '**/' = zero or more WHOLE path segments. Must be boundary-anchored so that
+                        // '**/Crypto.cs' matches 'src/Crypto.cs' and 'Crypto.cs' but NOT 'src/NotCrypto.cs'.
+                        sb.Append("(?:.*/)?");
+                        i++; // consume the '/'
+                    }
+                    else
+                    {
+                        // Trailing or un-anchored '**' (e.g. 'src/**') crosses segments freely.
+                        sb.Append(".*");
+                    }
                 }
                 else
                 {
-                    sb.Append("[^/]*");
+                    sb.Append("[^/]*"); // single '*' stays within one segment
                 }
             }
             else if (c == '?')
@@ -72,12 +81,22 @@ internal static class GlobMatcher
     }
 }
 
+/// <summary>
+/// A config that exists but cannot be parsed/validated. This is fatal by design: silently reverting to
+/// defaults could drop a severity floor or waiver an auditor relied on (fail-closed, TDD §0 misuse-resistance).
+/// </summary>
+internal sealed class ConfigException : Exception
+{
+    public ConfigException(string message, Exception? inner = null) : base(message, inner) { }
+}
+
 /// <summary>Discovers and loads an optional <c>cbom.config.json</c>.</summary>
 internal static class ConfigLoader
 {
     public static CbomConfig? Load(string? explicitPath, string target, IList<string> diagnostics)
     {
         string? path = explicitPath;
+        bool wasExplicit = explicitPath is not null;
         if (path is null)
         {
             string dir = File.Exists(target) ? Path.GetDirectoryName(target) ?? "." : target;
@@ -89,16 +108,24 @@ internal static class ConfigLoader
         if (path is null)
             return null;
 
+        // An explicitly requested config that does not exist is a usage error, not "no config."
+        if (wasExplicit && !File.Exists(path))
+            throw new ConfigException($"config not found: {path}");
+
         try
         {
             CbomConfig config = CbomConfig.Load(path);
             diagnostics.Add($"Using config: {path}");
             return config;
         }
+        catch (ConfigException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            diagnostics.Add($"Failed to load config '{path}': {ex.Message}");
-            return null;
+            // Fail-closed: a present-but-broken config aborts the scan rather than scanning on defaults.
+            throw new ConfigException($"failed to load config '{path}': {ex.Message}", ex);
         }
     }
 }
@@ -135,8 +162,13 @@ internal static class ConfigApplication
             bool disabled = (algRule?.Enabled ?? rule?.Enabled) == false;
             if (disabled)
             {
+                bool justified = !string.IsNullOrWhiteSpace(effective?.WaiverJustification);
                 bool expired = TryParseDate(effective?.WaiverExpiry, out DateOnly exp) && exp < today;
-                bool suppress = profile.WaiversSuppress && !expired;
+
+                // Misuse-resistance (TDD §0): a waiver may only suppress a finding when it is JUSTIFIED and
+                // not expired. An unjustified disable cannot quietly remove findings — it is retained and
+                // flagged, so a typo'd or rubber-stamped config can never produce a misleading "clean" BOM.
+                bool suppress = profile.WaiversSuppress && !expired && justified;
                 RecordWaiver(waivers, f.RuleId, effective, suppress, expired);
 
                 if (suppress)
@@ -145,16 +177,20 @@ internal static class ConfigApplication
                     continue;
                 }
 
-                // Audit profile, or an expired waiver: keep the finding so it stays visible.
+                if (!justified)
+                    diagnostics.Add($"config: rule {f.RuleId} disabled without a waiverJustification; finding RETAINED "
+                        + "(a waiver must be justified to suppress).");
+                else if (expired)
+                    diagnostics.Add($"config: waiver for {f.RuleId} expired {effective?.WaiverExpiry}; finding re-activated.");
+
                 f = f with
                 {
-                    Status = expired ? f.Status : RemediationStatus.Waived,
+                    // Mark Waived only for a valid (justified, unexpired) annotate-only waiver (audit profile).
+                    Status = justified && !expired ? RemediationStatus.Waived : f.Status,
                     WaiverJustification = effective?.WaiverJustification,
                     WaiverApprover = effective?.WaiverApprover,
                     WaiverExpiry = effective?.WaiverExpiry,
                 };
-                if (expired)
-                    diagnostics.Add($"config: waiver for {f.RuleId} expired {effective?.WaiverExpiry}; finding re-activated.");
             }
 
             // --- Path filters ---

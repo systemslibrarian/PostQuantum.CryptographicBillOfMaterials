@@ -8,41 +8,34 @@ using PostQuantum.CryptographicBillOfMaterials.Rules;
 namespace PostQuantum.CryptographicBillOfMaterials.Analysis.Detectors;
 
 /// <summary>
-/// Detects construction of <c>System.Random</c>, a non-cryptographic RNG. Base case is low-noise (a weak
-/// RNG for gameplay is not a vulnerability), but when the surrounding code suggests the random material
-/// flows into a key, token, IV, nonce, salt, or password the finding is elevated to a real weakness — the
-/// distinction the roadmap calls for (CWE-338).
+/// Detects use of <c>System.Random</c> / <c>Random.Shared</c>, a non-cryptographic RNG. Base case is
+/// low-noise (a weak RNG for gameplay is not a vulnerability), but <see cref="CryptoTaintAnalysis"/> elevates
+/// the finding to Broken/High when intra-method dataflow shows the random output reaching a key/IV/nonce
+/// sink — the precise distinction the roadmap calls for, without the false positives of name-matching (CWE-338).
 /// </summary>
 internal sealed class WeakRandomDetector : DetectorBase
 {
     private const string SystemRandomType = "System.Random";
-
-    /// <summary>Identifier substrings that indicate the random output is security-sensitive material.</summary>
-    private static readonly string[] SensitiveTokens =
-    {
-        "key", "secret", "token", "password", "passwd", "pwd", "iv", "nonce", "salt",
-        "otp", "apikey", "session", "credential", "cipher", "crypto", "sign",
-    };
 
     public override DetectorMetadata Metadata { get; } = new(
         "CBOM0050", "Non-cryptographic random number generator", RuleCategory.Randomness, RiskLevel.Low,
         "System.Random is not cryptographically secure; use RandomNumberGenerator for security-sensitive values (CWE-338).");
 
     public override IReadOnlyCollection<SyntaxKind> SyntaxKinds { get; } =
-        new[] { SyntaxKind.ObjectCreationExpression };
+        new[] { SyntaxKind.ObjectCreationExpression, SyntaxKind.SimpleMemberAccessExpression };
 
     public override void Inspect(DetectionContext ctx)
     {
-        ITypeSymbol? type = ResolveInstantiatedType(ctx);
-        if (type is null || FullName(type) != SystemRandomType)
+        SyntaxNode? source = MatchRandomSource(ctx);
+        if (source is null)
             return;
 
-        bool sensitive = FlowsIntoSensitiveMaterial(ctx.Node);
+        bool sensitive = CryptoTaintAnalysis.WeakRandomReachesKeyMaterial(ctx.SemanticModel, source);
 
         const string baseBasis =
             "System.Random is not cryptographically secure; if used for keys/tokens/IVs use RandomNumberGenerator (CWE-338).";
         const string sensitiveBasis =
-            "System.Random output flows into security-sensitive material (key/token/IV/nonce/salt). Its 31-bit, "
+            "Weak randomness from System.Random flows into key/IV/nonce material (intra-method dataflow). Its "
             + "predictable, seedable state makes the produced secret recoverable (CWE-338, CWE-330).";
 
         string basis = sensitive ? sensitiveBasis : baseBasis;
@@ -59,9 +52,9 @@ internal sealed class WeakRandomDetector : DetectorBase
             });
 
         ctx.Report(FindingFactory.Create(
-            Metadata, ctx, ctx.Node,
+            Metadata, ctx, source,
             displayName: sensitive
-                ? "System.Random for security-sensitive material"
+                ? "System.Random reaching key material"
                 : "System.Random (non-cryptographic RNG)",
             quantumVulnerability: QuantumVulnerability.NotVulnerable,
             classicalWeakness: sensitive ? ClassicalWeakness.Broken : ClassicalWeakness.Suboptimal,
@@ -75,52 +68,22 @@ internal sealed class WeakRandomDetector : DetectorBase
             primitive: "rng"));
     }
 
-    /// <summary>
-    /// Heuristic: does the enclosing method, the variable the RNG is stored in, or any identifier in the
-    /// enclosing statement name security-sensitive material? Scoped to the enclosing member to stay low-FP.
-    /// </summary>
-    private static bool FlowsIntoSensitiveMaterial(SyntaxNode node)
+    /// <summary>Match a weak-random source: <c>new Random()</c> or the <c>Random.Shared</c> singleton.</summary>
+    private static SyntaxNode? MatchRandomSource(DetectionContext ctx)
     {
-        // 1. The variable the new Random() initializes, or the assignment target.
-        for (SyntaxNode? n = node.Parent; n is not null; n = n.Parent)
+        switch (ctx.Node)
         {
-            switch (n)
-            {
-                case VariableDeclaratorSyntax v when NameIsSensitive(v.Identifier.ValueText):
-                    return true;
-                case AssignmentExpressionSyntax a when ExpressionNameIsSensitive(a.Left):
-                    return true;
-                case StatementSyntax stmt:
-                    if (stmt.DescendantTokens().Any(t =>
-                            t.IsKind(SyntaxKind.IdentifierToken) && NameIsSensitive(t.ValueText)))
-                        return true;
-                    goto checkMember;
-            }
+            case ObjectCreationExpressionSyntax:
+                ITypeSymbol? type = ResolveInstantiatedType(ctx);
+                return type is not null && FullName(type) == SystemRandomType ? ctx.Node : null;
+
+            case MemberAccessExpressionSyntax ma when ma.Name.Identifier.ValueText == "Shared":
+                // Report at the Random.Shared site only; skip the outer member access of e.g. .NextBytes.
+                ITypeSymbol? t = ctx.SemanticModel.GetTypeInfo(ma).Type;
+                return t is not null && FullName(t) == SystemRandomType ? ma : null;
+
+            default:
+                return null;
         }
-
-    checkMember:
-        // 2. The enclosing member name (e.g., GenerateKey, CreateToken).
-        SyntaxNode? member = node.FirstAncestorOrSelf<MemberDeclarationSyntax>();
-        return member switch
-        {
-            MethodDeclarationSyntax m => NameIsSensitive(m.Identifier.ValueText),
-            PropertyDeclarationSyntax p => NameIsSensitive(p.Identifier.ValueText),
-            _ => false,
-        };
-    }
-
-    private static bool ExpressionNameIsSensitive(ExpressionSyntax expr) => expr switch
-    {
-        IdentifierNameSyntax id => NameIsSensitive(id.Identifier.ValueText),
-        MemberAccessExpressionSyntax m => NameIsSensitive(m.Name.Identifier.ValueText),
-        _ => false,
-    };
-
-    private static bool NameIsSensitive(string name)
-    {
-        foreach (string token in SensitiveTokens)
-            if (name.Contains(token, StringComparison.OrdinalIgnoreCase))
-                return true;
-        return false;
     }
 }

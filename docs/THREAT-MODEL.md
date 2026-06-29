@@ -15,6 +15,7 @@ own trustworthiness, not the crypto it inventories.
 |---|---|
 | **False negative on high-risk crypto** | Fail-closed: prefer false positives on high-risk; floors that config cannot lower; every detected weakness emitted with confidence rather than suppressed. |
 | **Silent under-reporting from load/compile failure** | A project that fails to analyze is reported "not analyzed," never "clean"; reflected in coverage counts and (configurably) exit code 2. |
+| **The config file as an attack surface (silent weakening)** | A malformed `cbom.config.json` is **fatal** (exit 3), never a quiet revert to defaults that drops a floor. A waiver (disabled rule) only suppresses when it is **justified and unexpired**; an unjustified or expired waiver retains the finding and is flagged. Severity floors only raise. All applied config/waivers are recorded in the CBOM. (Unit + integration tested.) |
 | **Misleading remediation** | Misuse-resistance invariant (unit-tested): no recommendation may yield a less-safe configuration; standards-based options only. |
 | **Author-bias toward own packages** | `PostQuantum.*` packages appear only as one option among standards-based alternatives, never the sole path. |
 | **Malicious / buggy plugin** | Plugins run as in-process code and are explicitly trusted; documented as such. Future: load in a restricted `AssemblyLoadContext`, validate unique rule ids + mandatory basis, isolate exceptions. |

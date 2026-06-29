@@ -47,8 +47,10 @@ and schema-validates on every run.
 
 ### Remaining gaps in *this build* (not inherent)
 
-- **Intra-method dataflow beyond `KeySize`.** IV/nonce/key *flow* tracking is heuristic (identifier-based),
-  not a full dataflow analysis.
+- **Dataflow is intra-method only.** Weak-RNG → key/IV/nonce flow now uses a real intra-procedural taint
+  analysis (`CryptoTaintAnalysis`, see [ADR 0002](adr/0002-intra-method-taint-for-key-material.md)), not
+  identifier names. It does **not** follow values across method boundaries or constructor injection, branch
+  /loop semantics are approximated by a linear pass, and only `System.Random`/`Random.Shared` are sources.
 - **Cloud KMS region/account/rotation.** Captured only when statically visible; usually runtime config.
 - **No-MSBuild fallback.** Symbol-based third-party detectors may not fire without restored packages; the
   package-manifest inventory (CBOM0081) mitigates this but does not replace per-call-site detection.

@@ -16,7 +16,17 @@ internal static class ScanRunner
         string target = Path.GetFullPath(options.Target);
         var diagnostics = new List<string>();
 
-        CbomConfig? config = ConfigLoader.Load(options.ConfigPath, target, diagnostics);
+        CbomConfig? config;
+        try
+        {
+            config = ConfigLoader.Load(options.ConfigPath, target, diagnostics);
+        }
+        catch (ConfigException ex)
+        {
+            // Fail-closed: never scan on defaults when a config exists but is broken.
+            Console.Error.WriteLine($"error: {ex.Message}");
+            return 3;
+        }
         if (config is not null)
         {
             if (!options.FailOnSet && config.FailOn is not null)
