@@ -8,7 +8,7 @@ Built for ordinary .NET teams — county IT, libraries, SaaS vendors, defense su
 respond to federal PQC-migration timelines, often **without an in-house cryptographer**.
 
 > **Honesty first.** A clean scan means *"no detectable issues in analyzed source,"* not *"the system is
-> quantum-safe."* See [`docs/KNOWN-GAPS.md`](docs/KNOWN-GAPS.md) for exactly what static analysis cannot see.
+> quantum-safe."* See [`docs/KNOWN-GAPS.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/KNOWN-GAPS.md) for exactly what static analysis cannot see.
 
 ## What it does
 
@@ -88,7 +88,7 @@ Use the official composite action (SARIF upload + artifact retention built in):
 ```yaml
 - uses: actions/setup-dotnet@v4
   with: { dotnet-version: '8.0.x' }
-- uses: systemslibrarian/CryptographicBillOfMaterials@v1
+- uses: systemslibrarian/PostQuantum.CryptographicBillOfMaterials@v1
   with:
     target: ./MyApp.sln
     formats: cyclonedx,sarif,markdown,summary
@@ -98,7 +98,7 @@ Use the official composite action (SARIF upload + artifact retention built in):
 ```
 
 Full copy-paste pipelines for **GitHub Actions** (with a PR baseline-diff comment), **Azure DevOps**, and
-**GitLab CI** are in [`examples/ci/`](examples/ci/). Start at `--fail-on critical` and ratchet down as the
+**GitLab CI** are in [`examples/ci/`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/tree/main/examples/ci). Start at `--fail-on critical` and ratchet down as the
 inventory matures; SARIF lights up code scanning while the CBOM artifact feeds Dependency-Track or an auditor.
 
 ## How risk and readiness are computed (transparent)
@@ -108,7 +108,7 @@ inventory matures; SARIF lights up code scanning while the CBOM artifact feeds D
 - **PQC Readiness** = `100 × safe-weight / total-weight` over quantum-relevant algorithms only; classical
   and config issues are reported separately so they don't distort the PQC picture.
 
-Full methodology and the CycloneDX profile delta are in [`docs/TECHNICAL-DESIGN.md`](docs/TECHNICAL-DESIGN.md).
+Full methodology and the CycloneDX profile delta are in [`docs/TECHNICAL-DESIGN.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/TECHNICAL-DESIGN.md).
 
 ## Standards alignment
 
@@ -116,12 +116,12 @@ Output is a valid **CycloneDX 1.6** BOM (the version that upstreamed CBOM) — p
 official JSON Schema. PQC/risk fields live in the sanctioned `properties`/`evidence` extension points under
 the `cbom:` namespace, so any CycloneDX-aware tool can ingest it. Verdicts cite FIPS 203/204/205, NIST SP
 800-131A/800-52, NIST IR 8547 (⚠ draft), CNSA 2.0, and CWE — see the citation-status table in
-[`docs/RULES.md`](docs/RULES.md).
+[`docs/RULES.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/RULES.md).
 
 Configuration (`cbom.config.json`): rule toggles recorded as **waivers** (justification/approver/expiry),
 **per-algorithm** tuning, severity floors that only raise, path globs, and **data-sensitivity hints** by
 path or namespace (`ns:`) that elevate harvest-now-decrypt-later risk. Everything applied is recorded back
-into the CBOM. See [`samples/cbom.config.example.json`](samples/cbom.config.example.json).
+into the CBOM. See [`samples/cbom.config.example.json`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/samples/cbom.config.example.json).
 
 ## Project layout
 
@@ -140,8 +140,8 @@ examples/ci/  github-actions.yml · azure-pipelines.yml · gitlab-ci.yml
 Active development. Working today: scan (solution/project/directory), **16 rules**, all report formats as
 audit packets, diff/baseline with remediation status, **policy profiles**, expressive config, **official
 CycloneDX 1.6 schema validation**, a GitHub Action + CI examples, and a tool SBOM. See
-[`docs/ACCURACY-AND-LIMITATIONS.md`](docs/ACCURACY-AND-LIMITATIONS.md) and
-[`docs/KNOWN-GAPS.md`](docs/KNOWN-GAPS.md) for what static analysis can and cannot see.
+[`docs/ACCURACY-AND-LIMITATIONS.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/ACCURACY-AND-LIMITATIONS.md) and
+[`docs/KNOWN-GAPS.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/KNOWN-GAPS.md) for what static analysis can and cannot see.
 
 ## License
 
