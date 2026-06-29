@@ -1,0 +1,55 @@
+name: VS Code Extension
+
+# Typechecks the extension on every change under extensions/vscode, and publishes it to the
+# Visual Studio Marketplace when a tag like `vscode-v0.1.0` is pushed.
+#
+# Publishing requires a Marketplace Personal Access Token stored as the VSCE_PAT secret:
+#   1. Create a publisher at https://marketplace.visualstudio.com/manage (id must match "publisher" in package.json).
+#   2. In Azure DevOps (https://dev.azure.com), create a PAT with Marketplace > Manage scope, all organizations.
+#   3. Add it to the repo as Settings > Secrets and variables > Actions > VSCE_PAT.
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'vscode-v*' ]
+  pull_request:
+    paths: [ 'extensions/vscode/**' ]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: extensions/vscode
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Typecheck + compile
+        run: npm run compile
+      - name: Package (.vsix)
+        run: npx @vscode/vsce package --no-dependencies
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: extensions/vscode/*.vsix
+
+  publish:
+    # Only on a vscode-v* tag. The publish step itself is skipped if the token isn't configured yet.
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/vscode-v')
+    runs-on: ubuntu-latest
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Publish to Marketplace
+        if: env.VSCE_PAT != ''
+        run: npx @vscode/vsce publish --no-dependencies
