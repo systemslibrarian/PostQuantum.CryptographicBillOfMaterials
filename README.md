@@ -10,6 +10,18 @@ respond to federal PQC-migration timelines, often **without an in-house cryptogr
 > **Honesty first.** A clean scan means *"no detectable issues in analyzed source,"* not *"the system is
 > quantum-safe."* See [`docs/KNOWN-GAPS.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/KNOWN-GAPS.md) for exactly what static analysis cannot see.
 
+## The toolkit — three ways to use it
+
+One detection engine, shipped three ways. All run **entirely locally** — no source upload, no telemetry.
+
+| Component | What it's for | Get it |
+|---|---|---|
+| **`dotnet-cbom` CLI** | Full scan of a solution/project/directory → CycloneDX, SARIF, HTML, and summary reports; PQC readiness score; baseline diffing; CI gate. | [NuGet ↗](https://www.nuget.org/packages/PostQuantum.CryptographicBillOfMaterials.Cli) |
+| **Roslyn analyzer** | The same rules as **in-editor squiggles while you type** — in Visual Studio, VS Code, Rider, and on `dotnet build`/CI. | [NuGet ↗](https://www.nuget.org/packages/PostQuantum.CryptographicBillOfMaterials.Analyzer) |
+| **VS Code extension** | A **PQC-readiness dashboard**, crypto-inventory sidebar, and status-bar score; one-click HTML report and CI scaffolding. | [Marketplace ↗](https://marketplace.visualstudio.com/items?itemName=systemslibrarian.postquantum-cbom) |
+
+Start with the CLI for reports and CI; add the analyzer for live feedback in any IDE; add the extension for a visual dashboard in VS Code.
+
 ## What it does
 
 - **Discovers** crypto across `System.Security.Cryptography`, JWT validation, TLS/cert handling, and
@@ -45,7 +57,7 @@ The same detection engine ships two ways for working *inside* your editor:
   ```bash
   dotnet add package PostQuantum.CryptographicBillOfMaterials.Analyzer
   ```
-- **VS Code extension** (`extensions/vscode`) — a PQC-readiness dashboard, crypto-inventory sidebar, and status-bar score, driven by this CLI's `--format json-summary` contract.
+- **VS Code extension** ([Marketplace](https://marketplace.visualstudio.com/items?itemName=systemslibrarian.postquantum-cbom), source in `extensions/vscode`) — a PQC-readiness dashboard, crypto-inventory sidebar, and status-bar score, driven by this CLI's `--format json-summary` contract. Install: search **"PostQuantum CBOM"** in the Extensions view.
 
 Both run **entirely locally** — no source upload, no telemetry.
 
