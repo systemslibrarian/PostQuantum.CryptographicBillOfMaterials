@@ -1,6 +1,3 @@
-using System.Reflection;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using PostQuantum.CryptographicBillOfMaterials.Model;
 
 namespace PostQuantum.CryptographicBillOfMaterials.Knowledge;
@@ -9,7 +6,13 @@ namespace PostQuantum.CryptographicBillOfMaterials.Knowledge;
 /// The algorithm knowledge base, loaded from the embedded <c>algorithms.json</c>. Central source of
 /// quantum/classical verdicts, OIDs, NIST levels, citations, and standards-based recommendations.
 /// </summary>
-public sealed class KnowledgeBase
+/// <remarks>
+/// This file is the dependency-free core (no <c>System.Text.Json</c>) so it can be shared-source compiled
+/// into the netstandard2.0 Roslyn analyzer. The System.Text.Json loader lives in the
+/// <c>KnowledgeBase.Json.cs</c> partial (CLI path); the analyzer uses <c>LoadPortable</c> in
+/// <c>KnowledgeBase.Portable.cs</c>, backed by <see cref="MiniJson"/>.
+/// </remarks>
+public sealed partial class KnowledgeBase
 {
     private readonly Dictionary<string, AlgorithmInfo> _byName;
 
@@ -29,28 +32,6 @@ public sealed class KnowledgeBase
     public AlgorithmInfo? Lookup(string name) =>
         _byName.TryGetValue(name, out var info) ? info : null;
 
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
-    {
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
-    };
-
-    /// <summary>Load the built-in knowledge base embedded in this assembly.</summary>
-    public static KnowledgeBase LoadDefault()
-    {
-        Assembly asm = typeof(KnowledgeBase).Assembly;
-        string resourceName = asm.GetManifestResourceNames()
-            .FirstOrDefault(n => n.EndsWith("algorithms.json", StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException("Embedded algorithms.json resource was not found.");
-
-        using Stream stream = asm.GetManifestResourceStream(resourceName)!;
-        KnowledgeFile doc = JsonSerializer.Deserialize<KnowledgeFile>(stream, SerializerOptions)
-            ?? throw new InvalidOperationException("Failed to parse algorithms.json.");
-
-        return new KnowledgeBase(doc.Version, doc.Algorithms);
-    }
-
     /// <summary>Build a runtime <see cref="Recommendation"/> for an algorithm, or null if none is defined.</summary>
     public Recommendation? BuildRecommendation(string name)
     {
@@ -62,11 +43,5 @@ public sealed class KnowledgeBase
             .Select(o => new RecommendationOption(o.Description, o.Basis, o.Tradeoffs, o.ResultingVulnerability))
             .ToList();
         return new Recommendation(info.Recommendation.Summary, options);
-    }
-
-    private sealed class KnowledgeFile
-    {
-        public string Version { get; init; } = "";
-        public List<AlgorithmInfo> Algorithms { get; init; } = new();
     }
 }

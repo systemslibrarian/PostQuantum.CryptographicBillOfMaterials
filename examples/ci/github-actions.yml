@@ -33,7 +33,7 @@ jobs:
 
       - name: Run dotnet-cbom
         id: cbom
-        uses: systemslibrarian/CryptographicBillOfMaterials@v1
+        uses: systemslibrarian/PostQuantum.CryptographicBillOfMaterials@v1
         with:
           target: ./YourSolution.sln
           formats: cyclonedx,sarif,markdown,summary

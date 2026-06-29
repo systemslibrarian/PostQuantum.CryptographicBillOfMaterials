@@ -1,11 +1,13 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/PostQuantum.CryptographicBillOfMaterials.Analysis/PostQuantum.CryptographicBillOfMaterials.Analysis.csproj" />
+    <Project Path="src/PostQuantum.CryptographicBillOfMaterials.Analyzer/PostQuantum.CryptographicBillOfMaterials.Analyzer.csproj" />
     <Project Path="src/PostQuantum.CryptographicBillOfMaterials.Cli/PostQuantum.CryptographicBillOfMaterials.Cli.csproj" />
     <Project Path="src/PostQuantum.CryptographicBillOfMaterials.Reporting/PostQuantum.CryptographicBillOfMaterials.Reporting.csproj" />
     <Project Path="src/PostQuantum.CryptographicBillOfMaterials/PostQuantum.CryptographicBillOfMaterials.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Analyzer.Tests/PostQuantum.CryptographicBillOfMaterials.Analyzer.Tests.csproj" />
     <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Cli.Tests/PostQuantum.CryptographicBillOfMaterials.Cli.Tests.csproj" />
     <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Reporting.Tests/PostQuantum.CryptographicBillOfMaterials.Reporting.Tests.csproj" />
     <Project Path="tests/PostQuantum.CryptographicBillOfMaterials.Tests/PostQuantum.CryptographicBillOfMaterials.Tests.csproj" />

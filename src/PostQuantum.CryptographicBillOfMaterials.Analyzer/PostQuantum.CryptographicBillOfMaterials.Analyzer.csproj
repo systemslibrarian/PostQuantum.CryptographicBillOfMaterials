@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Roslyn analyzers must load on netstandard2.0 so they run in every host (VS, VS Code C# Dev Kit,
+         Rider, command-line build). The dependency closure is kept to Microsoft.CodeAnalysis ONLY. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>PostQuantum.CryptographicBillOfMaterials.Analyzer</RootNamespace>
+    <AssemblyName>PostQuantum.CryptographicBillOfMaterials.Analyzer</AssemblyName>
+    <Description>Roslyn analyzer: in-editor cryptographic / post-quantum risk diagnostics (CBOM rules).</Description>
+
+    <!-- This is an analyzer assembly, not a library to reference at runtime. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+
+    <!-- Reuse the detector engine via shared-source compile (below); the knowledge base is loaded through
+         the System.Text.Json-free MiniJson path so nothing but the compiler libs enters the load context. -->
+    <PackageId>PostQuantum.CryptographicBillOfMaterials.Analyzer</PackageId>
+    <PackageTags>roslyn;analyzer;cryptography;post-quantum;pqc;cbom;security</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Ship as an analyzer: the assembly goes under analyzers/dotnet/cs (not lib/), and the package README
+       renders on nuget.org. IncludeBuildOutput=false above keeps it out of lib/. -->
+  <ItemGroup>
+    <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Shared-source: the real detector engine, compiled for netstandard2.0. We include exactly the
+       detector closure (Model, Rules, Risk, Knowledge minus the STJ partial, Detection, Detectors,
+       DetectorRegistry) and nothing else, so the analyzer stays dependency-light. -->
+  <ItemGroup>
+    <Compile Include="..\PostQuantum.CryptographicBillOfMaterials\Model\**\*.cs" LinkBase="Shared\Model" />
+    <Compile Include="..\PostQuantum.CryptographicBillOfMaterials\Rules\**\*.cs" LinkBase="Shared\Rules" />
+    <Compile Include="..\PostQuantum.CryptographicBillOfMaterials\Risk\**\*.cs" LinkBase="Shared\Risk" />
+    <Compile Include="..\PostQuantum.CryptographicBillOfMaterials\Knowledge\**\*.cs"
+             Exclude="..\PostQuantum.CryptographicBillOfMaterials\Knowledge\KnowledgeBase.Json.cs"
+             LinkBase="Shared\Knowledge" />
+    <Compile Include="..\PostQuantum.CryptographicBillOfMaterials.Analysis\Detection\**\*.cs" LinkBase="Shared\Detection" />
+    <Compile Include="..\PostQuantum.CryptographicBillOfMaterials.Analysis\Detectors\**\*.cs" LinkBase="Shared\Detectors" />
+    <Compile Include="..\PostQuantum.CryptographicBillOfMaterials.Analysis\Engine\DetectorRegistry.cs" LinkBase="Shared\Engine" />
+  </ItemGroup>
+
+  <!-- The knowledge base data, embedded so KnowledgeBase.LoadPortable() can find it (matches *algorithms.json). -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\PostQuantum.CryptographicBillOfMaterials\Knowledge\algorithms.json"
+                      LogicalName="PostQuantum.CryptographicBillOfMaterials.Knowledge.algorithms.json" />
+  </ItemGroup>
+
+</Project>

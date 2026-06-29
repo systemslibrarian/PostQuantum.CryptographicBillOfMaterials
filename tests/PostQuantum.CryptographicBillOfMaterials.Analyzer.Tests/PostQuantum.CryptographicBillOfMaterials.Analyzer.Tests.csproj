@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Curated BCL reference assemblies so the test compilation can bind System.Security.Cryptography
+         deterministically, independent of the host runtime. -->
+    <PackageReference Include="Basic.Reference.Assemblies.Net80" Version="1.7.8" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference the analyzer for its types (not as an analyzer); the harness drives it explicitly. -->
+    <ProjectReference Include="..\..\src\PostQuantum.CryptographicBillOfMaterials.Analyzer\PostQuantum.CryptographicBillOfMaterials.Analyzer.csproj"
+                      ReferenceOutputAssembly="true" OutputItemType="_AnalyzerRef" />
+  </ItemGroup>
+
+  <!-- The analyzer csproj sets IncludeBuildOutput=false (it ships under analyzers/, not lib/), which strips
+       the normal compile reference. Re-add the built dll as a plain reference so tests can see its types. -->
+  <Target Name="AddAnalyzerAsReference" BeforeTargets="ResolveReferences" Outputs="%(_AnalyzerRef.Identity)">
+    <ItemGroup>
+      <Reference Include="@(_AnalyzerRef)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

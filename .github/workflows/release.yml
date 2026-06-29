@@ -39,6 +39,9 @@ jobs:
       - name: Pack tool
         run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Cli -c Release -o artifacts -p:Version=${{ steps.ver.outputs.version }}
 
+      - name: Pack analyzer
+        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Analyzer -c Release -o artifacts -p:Version=${{ steps.ver.outputs.version }}
+
       - name: Generate tool SBOM
         run: |
           dotnet tool install --global CycloneDX

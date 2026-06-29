@@ -6,7 +6,7 @@ internal static class AlgorithmMap
     public static string? FromTypeName(string fullName)
     {
         int dot = fullName.LastIndexOf('.');
-        string simple = dot >= 0 ? fullName[(dot + 1)..] : fullName;
+        string simple = dot >= 0 ? fullName.Substring(dot + 1) : fullName;
 
         return simple switch
         {

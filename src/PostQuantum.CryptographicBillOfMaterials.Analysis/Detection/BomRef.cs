@@ -18,8 +18,15 @@ public static class BomRef
 
     private static string ShortHash(string value)
     {
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        return Convert.ToHexString(hash, 0, 6).ToLowerInvariant();
+        // Instance API + manual hex so the shared source also compiles on netstandard2.0 (the analyzer),
+        // where SHA256.HashData / Convert.ToHexString do not exist. Output is identical: the lowercase hex
+        // of the first 6 bytes (12 chars).
+        using var sha = SHA256.Create();
+        byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
+        var sb = new StringBuilder(12);
+        for (int i = 0; i < 6; i++)
+            sb.Append(hash[i].ToString("x2"));
+        return sb.ToString();
     }
 
     private static string Slug(string value)
