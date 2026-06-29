@@ -37,6 +37,18 @@ dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli
 
 (Requires the .NET SDK present for `.sln`/`.csproj` scans; a directory scan works without it.)
 
+## Editor integration
+
+The same detection engine ships two ways for working *inside* your editor:
+
+- **Roslyn analyzer** — weak/quantum-vulnerable crypto as squiggles while you type, in Visual Studio, VS Code, Rider, and `dotnet build`/CI:
+  ```bash
+  dotnet add package PostQuantum.CryptographicBillOfMaterials.Analyzer
+  ```
+- **VS Code extension** (`extensions/vscode`) — a PQC-readiness dashboard, crypto-inventory sidebar, and status-bar score, driven by this CLI's `--format json-summary` contract.
+
+Both run **entirely locally** — no source upload, no telemetry.
+
 ## Quick start
 
 ```bash

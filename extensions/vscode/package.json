@@ -1,0 +1,150 @@
+{
+  "name": "postquantum-cbom",
+  "displayName": "PostQuantum CBOM for .NET",
+  "description": "Cryptographic inventory and PQC readiness for .NET — find RSA, ECC, weak crypto, and quantum-migration risk inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "systemslibrarian",
+  "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "cryptography",
+    "post-quantum",
+    "pqc",
+    "cbom",
+    "security",
+    "dotnet"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials"
+  },
+  "homepage": "https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials",
+  "bugs": {
+    "url": "https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/issues"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.sln",
+    "workspaceContains:**/*.slnx",
+    "workspaceContains:**/*.csproj"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "cbom.scan",
+        "title": "Scan workspace for crypto / PQC risk",
+        "category": "CBOM",
+        "icon": "$(search)"
+      },
+      {
+        "command": "cbom.showDashboard",
+        "title": "Show PQC readiness dashboard",
+        "category": "CBOM",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "cbom.generateReport",
+        "title": "Generate HTML report",
+        "category": "CBOM"
+      },
+      {
+        "command": "cbom.addGitHubAction",
+        "title": "Add GitHub Action workflow",
+        "category": "CBOM"
+      },
+      {
+        "command": "cbom.refresh",
+        "title": "Refresh",
+        "category": "CBOM",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cbom",
+          "title": "PostQuantum CBOM",
+          "icon": "media/sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "cbom": [
+        {
+          "id": "cbomExplorer",
+          "name": "Crypto inventory",
+          "icon": "media/sidebar.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "cbom.scan",
+          "when": "view == cbomExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cbom.showDashboard",
+          "when": "view == cbomExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cbom.refresh",
+          "when": "view == cbomExplorer",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PostQuantum CBOM",
+      "properties": {
+        "cbom.cliPath": {
+          "type": "string",
+          "default": "dotnet-cbom",
+          "markdownDescription": "Path to the `dotnet-cbom` executable. If it is on your PATH (after `dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli`), the default is fine."
+        },
+        "cbom.target": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Scan target (solution, project, or directory) relative to the workspace root. Empty = the workspace folder."
+        },
+        "cbom.profile": {
+          "type": "string",
+          "enum": [
+            "general",
+            "federal",
+            "cnsa2",
+            "audit",
+            "developer"
+          ],
+          "default": "general",
+          "description": "Policy profile. Profiles may only raise severity, never lower it."
+        },
+        "cbom.scanOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Re-scan automatically when a C# file is saved. Off by default to keep things quiet and local."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}
