@@ -79,13 +79,37 @@ function body(s: CbomSummary): string {
         <span>${s.baselineDelta.regressed} regressed</span></div>`
     : '<div class="delta muted">No baseline supplied — run with a baseline to see migration progress.</div>';
 
+  // Only link to a playbook the summary actually carried; an older dotnet-cbom omits both fields, and a
+  // link to a section that was never rendered is worse than no link.
+  const playbooks = s.playbooks ?? [];
+  const known = new Set(playbooks.map((p) => p.id));
   const actions = s.topActions.length
-    ? s.topActions.map((a) => `<tr>
+    ? s.topActions.map((a) => {
+        const links = (a.playbookIds ?? []).filter((id) => known.has(id));
+        const guide = links.length
+          ? ` <a class="pb-link" href="#pb-${esc(links[0])}">migration playbook</a>`
+          : '';
+        return `<tr>
         <td><span class="pill ${a.level.toLowerCase()}">${a.level}</span></td>
         <td><code>${esc(a.ruleId)}</code></td>
         <td>${esc(a.algorithm)}${a.occurrences > 1 ? ` <span class="muted">×${a.occurrences}</span>` : ''}</td>
-        <td>${esc(a.action)}</td></tr>`).join('')
+        <td>${esc(a.action)}${guide}</td></tr>`;
+      }).join('')
     : '<tr><td colspan="4" class="muted">No high-risk actions detected.</td></tr>';
+
+  // The guidance itself. Absent when the CLI predates playbooks, so the whole section disappears rather
+  // than rendering an empty heading.
+  const playbookSection = playbooks.length
+    ? `<h2>Migration playbooks</h2>
+       ${playbooks.map((p) => `<details class="pb" id="pb-${esc(p.id)}">
+         <summary>${esc(p.title)}</summary>
+         <p class="muted">${esc(p.appliesTo)}</p>
+         <p><b>Target:</b> ${esc(p.target)}</p>
+         ${p.steps.length ? `<ol>${p.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ol>` : ''}
+       </details>`).join('')}
+       <p class="footnote">Worked code, library options and citations are in the Markdown and HTML
+         reports — run <code>Generate report</code>.</p>`
+    : '';
 
   return `
   <header>
@@ -114,6 +138,8 @@ function body(s: CbomSummary): string {
     <thead><tr><th>Risk</th><th>Rule</th><th>Algorithm</th><th>Action</th></tr></thead>
     <tbody>${actions}</tbody>
   </table>
+
+  ${playbookSection}
 
   <p class="footnote">A clean scan means “no detectable issues in analyzed source,” not “quantum-safe.”
     Runs locally — no code leaves your machine.</p>`;
@@ -162,6 +188,12 @@ const STYLES = `
   th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--vscode-widget-border); vertical-align: top; }
   th { opacity: .7; font-weight: 600; }
   .pill { padding: .1rem .45rem; border-radius: 10px; font-size: .75rem; }
+  .pb-link { color: var(--vscode-textLink-foreground); text-decoration: none; white-space: nowrap; }
+  .pb-link:hover { text-decoration: underline; }
+  .pb { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: .5rem .7rem; margin: .4rem 0; }
+  .pb summary { cursor: pointer; font-weight: 600; }
+  .pb ol { margin: .4rem 0 .2rem 1.1rem; padding: 0; }
+  .pb li { margin: .2rem 0; }
   .pill.critical { background: var(--vscode-charts-red); color: #fff; } .pill.high { background: var(--vscode-charts-yellow); color: #000; }
   .pill.medium, .pill.low, .pill.informational { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
   .footnote { margin-top: 1.6rem; font-size: .8rem; opacity: .65; }

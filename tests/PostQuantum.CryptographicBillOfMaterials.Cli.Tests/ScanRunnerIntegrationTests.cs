@@ -192,4 +192,35 @@ public class ScanRunnerIntegrationTests
             dir = dir.Parent;
         return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
     }
+    /// <summary>
+    /// The VS Code extension runs <c>--format json-summary</c> and then reads
+    /// <c>cbom.summary.json</c> from the output directory. Those two strings are a contract between two
+    /// codebases and nothing else asserted it: json-summary was missing from the renderer map, so the
+    /// format was reported unknown, skipped with a diagnostic, and the extension failed with "Scan
+    /// finished but no summary was produced" on every scan while the CLI exited normally.
+    /// </summary>
+    [Fact]
+    public async Task JsonSummaryFormat_WritesTheFileTheExtensionReads()
+    {
+        string outDir = NewTempDir();
+        var options = new ScanOptions
+        {
+            Target = Path.Combine(RepoRoot(), "samples", "VulnerableDemo"),
+            OutputDir = outDir,
+            Formats = new() { "json-summary" },
+            Quiet = true,
+        };
+
+        await ScanRunner.RunAsync(options);
+
+        string summaryPath = Path.Combine(outDir, "cbom.summary.json");
+        Assert.True(File.Exists(summaryPath),
+            $"expected the extension's summary at {summaryPath}; the json-summary format wrote nothing");
+
+        using JsonDocument doc = JsonDocument.Parse(await File.ReadAllTextAsync(summaryPath));
+        Assert.Equal(1, doc.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.True(doc.RootElement.TryGetProperty("topActions", out _));
+        Assert.True(doc.RootElement.TryGetProperty("playbooks", out _));
+    }
+
 }

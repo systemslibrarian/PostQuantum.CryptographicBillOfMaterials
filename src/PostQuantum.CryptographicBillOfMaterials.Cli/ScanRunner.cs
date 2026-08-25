@@ -324,6 +324,11 @@ internal static class ScanRunner
             ["sarif"] = new SarifReporter(),
             ["markdown"] = new MarkdownReporter(),
             ["summary"] = new ExecutiveSummaryReporter(),
+            // The machine-readable summary (cbom.summary.json). The VS Code extension asks for exactly
+            // this format and reads exactly this file; without the entry the format was reported as
+            // unknown, skipped with only a diagnostic line, and the extension failed with "no summary was
+            // produced" for every scan.
+            ["json-summary"] = new JsonSummaryReporter(),
             ["html"] = new HtmlReporter(),
         };
 

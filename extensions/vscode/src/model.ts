@@ -16,6 +16,12 @@ export interface CbomSummary {
   baselineDelta: BaselineDelta | null;
   coverage: Coverage;
   topActions: MigrationAction[];
+  /**
+   * Migration playbooks referenced by `topActions`, resolved and de-duplicated by the CLI.
+   * Optional: the extension can be newer than the `dotnet-cbom` on PATH, and summaries written
+   * before playbooks existed simply omit it. Treat absent and empty the same way.
+   */
+  playbooks?: MigrationPlaybook[];
 }
 
 export interface FindingCounts {
@@ -45,6 +51,21 @@ export interface MigrationAction {
   level: 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
   occurrences: number;
   action: string;
+  /** Ids into {@link CbomSummary.playbooks}. Optional for the same back-compat reason. */
+  playbookIds?: string[];
+}
+
+/**
+ * A concrete migration guide for one class of quantum-vulnerable cryptography. The summary carries the
+ * headline fields only — the worked code, library options and citations live in the Markdown and HTML
+ * reports, which is where someone actually doing the migration should be sent.
+ */
+export interface MigrationPlaybook {
+  id: string;
+  title: string;
+  appliesTo: string;
+  target: string;
+  steps: string[];
 }
 
 /** The supported schema version this extension understands. */

@@ -10,8 +10,14 @@ namespace PostQuantum.CryptographicBillOfMaterials.Reporting;
 public static class AuditInsights
 {
     /// <summary>One prioritized remediation action: the worst occurrence of an algorithm in a project.</summary>
+    /// <remarks>
+    /// <paramref name="PlaybookIds"/> carries the migration playbooks that apply, so a consumer that only
+    /// reads the summary — the VS Code extension, for one — can offer the guidance without re-deriving it
+    /// from the knowledge base or parsing the full document.
+    /// </remarks>
     public sealed record MigrationAction(
-        string Project, string Algorithm, string RuleId, RiskLevel Level, int Count, string Action);
+        string Project, string Algorithm, string RuleId, RiskLevel Level, int Count, string Action,
+        IReadOnlyList<string> PlaybookIds);
 
     /// <summary>The highest-priority remediation actions, grouped by project+algorithm and ordered by risk.</summary>
     public static IReadOnlyList<MigrationAction> TopActions(CbomDocument document, int max)
@@ -27,7 +33,10 @@ public static class AuditInsights
                 g.Key.RuleId,
                 g.Max(x => x.Finding.RiskLevel),
                 g.Count(),
-                FirstAction(g.First().Finding)))
+                FirstAction(g.First().Finding),
+                g.SelectMany(x => x.Finding.MigrationPlaybookIds)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList()))
             .OrderByDescending(a => a.Level)
             .ThenByDescending(a => a.Count)
             .ThenBy(a => a.Project, StringComparer.Ordinal)

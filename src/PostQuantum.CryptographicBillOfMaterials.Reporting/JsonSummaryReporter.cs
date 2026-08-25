@@ -1,3 +1,4 @@
+using PostQuantum.CryptographicBillOfMaterials.Knowledge;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using PostQuantum.CryptographicBillOfMaterials.Model;
@@ -11,6 +12,9 @@ namespace PostQuantum.CryptographicBillOfMaterials.Reporting;
 /// </summary>
 public sealed class JsonSummaryReporter : IReportRenderer
 {
+    /// <summary>Resolves playbook ids to content; same load path the Markdown and HTML reporters use.</summary>
+    private static readonly KnowledgeBase Knowledge = KnowledgeBase.LoadDefault();
+
     /// <summary>Bump only on a breaking change to the contract; additive fields keep the same version.</summary>
     public const int SchemaVersion = 1;
 
@@ -82,8 +86,9 @@ public sealed class JsonSummaryReporter : IReportRenderer
         writer.WriteEndObject();
 
         // A few highest-value migration actions so the extension can show "do these next" without re-deriving.
+        IReadOnlyList<AuditInsights.MigrationAction> actions = AuditInsights.TopActions(document, 5);
         writer.WriteStartArray("topActions");
-        foreach (AuditInsights.MigrationAction action in AuditInsights.TopActions(document, 5))
+        foreach (AuditInsights.MigrationAction action in actions)
         {
             writer.WriteStartObject();
             writer.WriteString("project", action.Project);
@@ -92,6 +97,35 @@ public sealed class JsonSummaryReporter : IReportRenderer
             writer.WriteString("level", action.Level.ToString());
             writer.WriteNumber("occurrences", action.Count);
             writer.WriteString("action", action.Action);
+            writer.WriteStartArray("playbookIds");
+            foreach (string id in action.PlaybookIds)
+                writer.WriteStringValue(id);
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+
+        // The playbooks those actions point at, resolved once and de-duplicated. Carrying the content here
+        // rather than only the ids is what lets an editor extension show the migration guidance itself: it
+        // has no knowledge base of its own, and an id alone would only tell it that guidance exists.
+        // Approaches and references are deliberately omitted — this is the "what do I do next" surface, and
+        // the full worked code belongs in the Markdown or HTML report.
+        writer.WriteStartArray("playbooks");
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string id in actions.SelectMany(a => a.PlaybookIds))
+        {
+            if (!emitted.Add(id) || Knowledge.Playbook(id) is not { } pb)
+                continue;
+
+            writer.WriteStartObject();
+            writer.WriteString("id", pb.Id);
+            writer.WriteString("title", pb.Title);
+            writer.WriteString("appliesTo", pb.AppliesTo);
+            writer.WriteString("target", pb.Target);
+            writer.WriteStartArray("steps");
+            foreach (string step in pb.Steps)
+                writer.WriteStringValue(step);
+            writer.WriteEndArray();
             writer.WriteEndObject();
         }
         writer.WriteEndArray();

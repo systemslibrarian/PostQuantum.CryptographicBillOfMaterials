@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using PostQuantum.CryptographicBillOfMaterials.Model;
@@ -60,5 +62,41 @@ public class JsonSummaryReporterTests
 
         Assert.True(actions.GetArrayLength() > 0);
         Assert.Equal("Critical", actions[0].GetProperty("level").GetString());
+    }
+
+    /// <summary>
+    /// Every playbook id referenced by an action must also be present in the top-level <c>playbooks</c>
+    /// array. The extension renders the guidance from that array alone -- it has no knowledge base -- so a
+    /// dangling id would surface as a link to a section that was never written.
+    /// </summary>
+    [Fact]
+    public void TopActions_PlaybookIds_AllResolveToAnEmittedPlaybook()
+    {
+        JsonElement root = Render(SampleDocuments.Create());
+
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JsonElement action in root.GetProperty("topActions").EnumerateArray())
+        {
+            Assert.True(action.TryGetProperty("playbookIds", out JsonElement ids),
+                "every action must carry a playbookIds array, even when empty");
+            foreach (JsonElement id in ids.EnumerateArray())
+                referenced.Add(id.GetString()!);
+        }
+
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JsonElement pb in root.GetProperty("playbooks").EnumerateArray())
+        {
+            string id = pb.GetProperty("id").GetString()!;
+            Assert.True(emitted.Add(id), $"playbook '{id}' was emitted more than once");
+
+            // Headline fields only; the worked code stays in the Markdown/HTML reports.
+            Assert.False(string.IsNullOrWhiteSpace(pb.GetProperty("title").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(pb.GetProperty("target").GetString()));
+            Assert.True(pb.TryGetProperty("appliesTo", out _));
+            Assert.True(pb.TryGetProperty("steps", out _));
+        }
+
+        Assert.True(referenced.IsSubsetOf(emitted),
+            "referenced playbook ids with no emitted playbook: " + string.Join(", ", referenced.Except(emitted)));
     }
 }
