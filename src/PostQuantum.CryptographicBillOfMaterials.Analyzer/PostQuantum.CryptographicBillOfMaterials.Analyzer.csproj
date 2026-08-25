@@ -47,10 +47,15 @@
     <Compile Include="..\PostQuantum.CryptographicBillOfMaterials.Analysis\Engine\DetectorRegistry.cs" LinkBase="Shared\Engine" />
   </ItemGroup>
 
-  <!-- The knowledge base data, embedded so KnowledgeBase.LoadPortable() can find it (matches *algorithms.json). -->
+  <!-- The knowledge base data, embedded so KnowledgeBase.LoadPortable() can find it. BOTH files are
+       required: LoadPortable reads algorithms.json and playbooks.json, and a missing resource throws
+       from the analyzer's static constructor, which surfaces as a TypeInitializationException on every
+       diagnostic rather than as a load-time warning. -->
   <ItemGroup>
     <EmbeddedResource Include="..\PostQuantum.CryptographicBillOfMaterials\Knowledge\algorithms.json"
                       LogicalName="PostQuantum.CryptographicBillOfMaterials.Knowledge.algorithms.json" />
+    <EmbeddedResource Include="..\PostQuantum.CryptographicBillOfMaterials\Knowledge\playbooks.json"
+                      LogicalName="PostQuantum.CryptographicBillOfMaterials.Knowledge.playbooks.json" />
   </ItemGroup>
 
 </Project>
