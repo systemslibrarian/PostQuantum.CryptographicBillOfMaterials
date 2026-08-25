@@ -1,0 +1,113 @@
+{
+  "version": "1.0",
+  "playbooks": [
+    {
+      "id": "pqc-key-establishment",
+      "title": "Migrate key establishment to ML-KEM (hybrid first)",
+      "appliesTo": "Anything that establishes a shared secret over a channel: RSA key transport/encryption, ECDH, and finite-field Diffie-Hellman. This is the highest-urgency class because of harvest-now-decrypt-later: an adversary can record ciphertext today and decrypt it once a quantum computer exists, so the data's required confidentiality lifetime — not the migration deadline — is the real clock.",
+      "target": "Hybrid X25519 + ML-KEM-768 during the transition; pure ML-KEM-768 (FIPS 203, NIST security level 3 / CNSA 2.0) once every peer supports it.",
+      "approaches": [
+        {
+          "name": "Transport security (TLS) — often no application code change",
+          "status": "Best first move for HTTPS/gRPC/database TLS. .NET 10 on a PQC-capable OS negotiates the hybrid group X25519MLKEM768 by default; the secret is protected the moment both ends support it.",
+          "recommendedFor": "Crypto that is really just 'TLS to another service.' Confirm the finding is transport, not application-layer key wrapping, before assuming you are done.",
+          "language": "text",
+          "code": "1. Upgrade the service to .NET 10+.\n2. Ensure the OS provides PQC primitives: OpenSSL 3.5+ (Linux/macOS) or Windows 11 / Server 2025 with PQC support.\n3. Verify negotiation: the TLS key share should be X25519MLKEM768. No application code change is typically required.",
+          "caveats": "A middlebox, load balancer, or peer that does not understand the hybrid group will fall back to classical X25519 — confirm end-to-end, and remember TLS protects data in transit only, not the harvest-now risk of data you key and store yourself."
+        },
+        {
+          "name": "In-box .NET 10 (System.Security.Cryptography.MLKem)",
+          "status": "Recommended for application-layer key establishment on .NET 10+. The MLKem type is stable (no longer [Experimental]). Requires OpenSSL 3.5+ (Linux/macOS) or Windows 11 / Server 2025 with PQC; always gate on MLKem.IsSupported.",
+          "recommendedFor": "Code that wraps/encrypts data keys yourself (envelope encryption, message encryption, key transport) rather than relying on TLS.",
+          "language": "csharp",
+          "code": "using System.Security.Cryptography;\n\nif (!MLKem.IsSupported)\n    throw new PlatformNotSupportedException(\n        \"ML-KEM needs OpenSSL 3.5+ or Windows 11 / Server 2025 with PQC.\");\n\nMLKemAlgorithm alg = MLKemAlgorithm.MLKem768;   // NIST level 3 / CNSA 2.0\n\n// Recipient: generate a keypair, publish only the encapsulation (public) key.\nusing MLKem recipient = MLKem.GenerateKey(alg);\nbyte[] encapsulationKey = recipient.ExportEncapsulationKey();\n\n// Sender: encapsulate against the recipient's public key.\nusing MLKem senderView = MLKem.ImportEncapsulationKey(alg, encapsulationKey);\nsenderView.Encapsulate(out byte[] ciphertext, out byte[] sharedSecretSender);\n\n// Recipient: decapsulate to recover the identical shared secret.\nbyte[] sharedSecretRecipient = recipient.Decapsulate(ciphertext);\n\n// The KEM only transports a secret. Don't use it as a key directly: derive a key with a\n// KDF, then encrypt with an AEAD. Full envelope on the sender side:\nbyte[] dataKey = HKDF.DeriveKey(HashAlgorithmName.SHA384, sharedSecretSender,\n    outputLength: 32, info: \"app: data-key v1\"u8.ToArray());\nbyte[] nonce = RandomNumberGenerator.GetBytes(AesGcm.NonceByteSizes.MaxSize);\nbyte[] payload = System.Text.Encoding.UTF8.GetBytes(\"secret message\");\nbyte[] cipher = new byte[payload.Length];\nbyte[] tag = new byte[AesGcm.TagByteSizes.MaxSize];\nusing (var gcm = new AesGcm(dataKey, tag.Length))\n    gcm.Encrypt(nonce, payload, cipher, tag);\n// Send { ciphertext (KEM), nonce, cipher, tag } to the recipient, who derives the same\n// dataKey from sharedSecretRecipient and AES-GCM-decrypts.",
+          "caveats": "ML-KEM keys and ciphertexts are far larger than ECDH (encapsulation key ~1184 bytes, ciphertext ~1088 bytes for MLKem768) — budget for storage, MTU, and message size. The KEM only transports a secret; you still need a KDF + AEAD for the actual data."
+        },
+        {
+          "name": "Hybrid (X25519 + ML-KEM) for the transition",
+          "status": "Safest interim posture: derive one key from BOTH an X25519 exchange and an ML-KEM encapsulation, then KDF the concatenation. The result stays secure if either primitive is later broken.",
+          "recommendedFor": "Any system that must remain secure today against classical attackers and tomorrow against quantum ones, while PQC library/peer support is still maturing.",
+          "language": "csharp",
+          "code": "// Concatenate both shared secrets, then derive the working key from the pair.\n// classicalSecret = X25519 ECDH output;  pqcSecret = ML-KEM Decapsulate output.\nbyte[] combined = [.. classicalSecret, .. pqcSecret];\nbyte[] key = HKDF.DeriveKey(\n    HashAlgorithmName.SHA384, combined,\n    outputLength: 32, info: \"app: hybrid-kem v1\"u8.ToArray());",
+          "caveats": "Bind a version/context label into the KDF info so the scheme can evolve. Never XOR the secrets — concatenate and KDF."
+        },
+        {
+          "name": "BouncyCastle (pre-.NET 10 or unsupported OS)",
+          "status": "Use when you cannot run .NET 10 or a PQC-capable OS. The BouncyCastle.Cryptography package (>= 2.5.0) implements ML-KEM under Org.BouncyCastle.Pqc.Crypto.MLKem.",
+          "recommendedFor": "Apps pinned to .NET 8/older runtimes or platforms without OpenSSL 3.5 / CNG PQC.",
+          "language": "text",
+          "code": "Add the BouncyCastle.Cryptography package (>= 2.5.0), then: generate a keypair with MLKemKeyPairGenerator (init with MLKemKeyGenerationParameters + MLKemParameters.ml_kem_768); on the sender side use MLKemEncapsulator (Init with the recipient's public key, then Encapsulate to get the ciphertext + shared secret); on the recipient side use MLKemDecapsulator (Init with the private key, then Decapsulate). Then derive a key with HKDF and encrypt with an AEAD, exactly as in the in-box example. Consult the current BouncyCastle .NET docs for the exact namespaces/imports in your package version.",
+          "caveats": "Requires BouncyCastle.Cryptography >= 2.5.0, which replaced the pre-standard Kyber types with FIPS 203 ML-KEM. Treat as a transition bridge and move to the in-box API on .NET 10+, which uses the platform's validated crypto. Pin and review the dependency like any crypto library."
+        }
+      ],
+      "steps": [
+        "Inventory every call site this rule flagged and classify each as transport (TLS) vs. application-layer key establishment — they have very different fixes.",
+        "Put the data's required confidentiality lifetime on each one. Long-lived secrets (records, backups, keys, health/financial/PII data) are the harvest-now-decrypt-later priorities; migrate them first.",
+        "Abstract key establishment behind an interface if it is currently inlined, so the algorithm can change without touching call sites (crypto agility).",
+        "Pilot the hybrid X25519 + ML-KEM-768 approach in one low-risk service; measure key/ciphertext size and latency impact.",
+        "Roll out hybrid broadly; keep classical as the fallback until all peers negotiate PQC.",
+        "Re-scan with dotnet-cbom and confirm the finding moves to PostQuantum; record the change against your baseline."
+      ],
+      "references": [
+        { "title": "Post-Quantum Cryptography in .NET (.NET Blog)", "url": "https://devblogs.microsoft.com/dotnet/post-quantum-cryptography-in-dotnet/" },
+        { "title": "What's new in .NET 10 libraries — Cryptography", "url": "https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10/libraries" },
+        { "title": "NIST FIPS 203 — ML-KEM", "url": "https://csrc.nist.gov/pubs/fips/203/final" },
+        { "title": "NIST IR 8547 (DRAFT) — Transition to PQC Standards", "url": "https://csrc.nist.gov/pubs/ir/8547/ipd" }
+      ]
+    },
+    {
+      "id": "pqc-signatures",
+      "title": "Migrate digital signatures to ML-DSA (or SLH-DSA)",
+      "appliesTo": "RSA, ECDSA, and DSA used for signing/verification: tokens (JWT), document/message signing, code/firmware signing, and certificate chains. Signatures are lower harvest-now urgency than key establishment — a signature forged after quantum arrives cannot retroactively forge yesterday's — but anything that must verify for years (firmware, long-lived roots, archived documents) needs a quantum-safe scheme now.",
+      "target": "ML-DSA (FIPS 204, NIST level 3 / CNSA 2.0) for general signatures; SLH-DSA (FIPS 205) for long-lived or firmware/code signing where conservative hash-based security is worth the larger signatures.",
+      "approaches": [
+        {
+          "name": "In-box .NET 10 (System.Security.Cryptography.MLDsa)",
+          "status": "Recommended on .NET 10+. The MLDsa type is stable (no longer [Experimental]; a few methods remain experimental). Requires OpenSSL 3.5+ (Linux/macOS) or Windows 11 / Server 2025 with PQC; gate on MLDsa.IsSupported.",
+          "recommendedFor": "General-purpose signing and verification in services already on .NET 10.",
+          "language": "csharp",
+          "code": "using System.Security.Cryptography;\n\nif (!MLDsa.IsSupported)\n    throw new PlatformNotSupportedException(\n        \"ML-DSA needs OpenSSL 3.5+ or Windows 11 / Server 2025 with PQC.\");\n\nMLDsaAlgorithm alg = MLDsaAlgorithm.MLDsa65;   // NIST level 3 / CNSA 2.0\n\n// Signer\nusing MLDsa signer = MLDsa.GenerateKey(alg);\nbyte[] signature = new byte[alg.SignatureSizeInBytes];\nsigner.SignData(data, signature);\n\n// Publish the public key for verifiers.\nbyte[] publicKey = new byte[alg.PublicKeySizeInBytes];\nsigner.ExportMLDsaPublicKey(publicKey);\n\n// Verifier (reconstruct from the published public key)\nusing MLDsa verifier = MLDsa.ImportMLDsaPublicKey(alg, publicKey);\nbool ok = verifier.VerifyData(data, signature);",
+          "caveats": "ML-DSA signatures and keys are much larger than ECDSA (MLDsa65 signature ~3309 bytes, public key ~1952 bytes). Check token/header size limits (e.g. JWT in a cookie or HTTP header) before adopting."
+        },
+        {
+          "name": "SLH-DSA for firmware / code signing / long-lived roots",
+          "status": "Stateless hash-based signatures (FIPS 205, SlhDsa type). Security rests only on the hash function, making it the conservative choice for things that must verify for a decade or more.",
+          "recommendedFor": "Firmware/code signing, certificate roots, and archived-document signatures where longevity matters more than signature size.",
+          "language": "csharp",
+          "code": "// Same shape as MLDsa: SlhDsa.GenerateKey(SlhDsaAlgorithm.SlhDsaSha2_128s),\n// then SignData / VerifyData. Pick a parameter set deliberately: the 's'\n// variants are small-signature/slow, the 'f' variants are fast/large.",
+          "caveats": "SLH-DSA signatures are large (tens of KB depending on parameter set). Excellent for infrequent, high-assurance signing; poor for high-volume per-request signing."
+        },
+        {
+          "name": "Hybrid / composite signatures for certificates",
+          "status": ".NET 10 adds CompositeMLDsa for X.509 scenarios that must carry both a classical and a PQC signature during transition (e.g. a CA that not-yet-PQC clients and PQC clients both trust).",
+          "recommendedFor": "PKI and certificate chains migrating while a mixed population of relying parties exists.",
+          "language": "text",
+          "code": "Use CompositeMLDsa (System.Security.Cryptography) to produce a certificate signature that combines a traditional algorithm with ML-DSA, so both legacy and PQC-aware verifiers can validate during the transition.",
+          "caveats": "Composite certificates are larger and require relying-party support; treat as a transition mechanism, not the end state."
+        },
+        {
+          "name": "BouncyCastle (pre-.NET 10 or unsupported OS)",
+          "status": "Use when you cannot run .NET 10 / a PQC-capable OS. BouncyCastle.Cryptography (>= 2.5.0) implements ML-DSA under Org.BouncyCastle.Pqc.Crypto.MLDsa (and SLH-DSA).",
+          "recommendedFor": "Apps pinned to older runtimes or platforms without OpenSSL 3.5 / CNG PQC.",
+          "language": "text",
+          "code": "Add the BouncyCastle.Cryptography package (>= 2.5.0), then: generate a keypair with MLDsaKeyPairGenerator (init with MLDsaKeyGenerationParameters + MLDsaParameters.ml_dsa_65); sign with MLDsaSigner (construct with the parameter set, Init(true, privateKey), BlockUpdate(data), GenerateSignature()); verify with another MLDsaSigner (Init(false, publicKey), BlockUpdate(data), VerifySignature(signature)). Consult the current BouncyCastle .NET docs for the exact namespaces/imports in your package version.",
+          "caveats": "Requires BouncyCastle.Cryptography >= 2.5.0, which replaced the pre-standard Dilithium types with FIPS 204 ML-DSA. Treat as a bridge; move to the in-box API on .NET 10+. Pin and review like any crypto dependency."
+        }
+      ],
+      "steps": [
+        "List every signing/verification call site this rule flagged and tag its purpose: token, document, message, or code/firmware signing.",
+        "Sort by verification lifetime. Firmware, certificate roots, and archived documents that must verify for years are the first to need a quantum-safe scheme; short-lived access tokens are lower urgency.",
+        "Check size budgets early — PQC signatures and keys are much larger; verify they fit your tokens, headers, certificates, and storage.",
+        "Abstract signing behind an interface so the algorithm is swappable without touching every call site.",
+        "Pilot ML-DSA (or SLH-DSA for long-lived signing) in one path; verify interop with every component that checks the signature.",
+        "Roll out, then re-scan with dotnet-cbom and confirm the finding moves to PostQuantum against your baseline."
+      ],
+      "references": [
+        { "title": "Post-Quantum Cryptography in .NET (.NET Blog)", "url": "https://devblogs.microsoft.com/dotnet/post-quantum-cryptography-in-dotnet/" },
+        { "title": "What's new in .NET 10 libraries — Cryptography", "url": "https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10/libraries" },
+        { "title": "NIST FIPS 204 — ML-DSA", "url": "https://csrc.nist.gov/pubs/fips/204/final" },
+        { "title": "NIST FIPS 205 — SLH-DSA", "url": "https://csrc.nist.gov/pubs/fips/205/final" }
+      ]
+    }
+  ]
+}

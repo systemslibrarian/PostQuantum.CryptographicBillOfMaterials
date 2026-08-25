@@ -53,6 +53,13 @@ public sealed record ProjectInventory
 
     /// <summary>True when the project has no quantum-relevant crypto; a score of 100 then means "nothing to assess."</summary>
     public bool ReadinessTrivial { get; init; }
+
+    /// <summary>
+    /// True when this project was analyzed in a degraded mode: MSBuild failed to load the .sln/.csproj and the
+    /// tool fell back to a syntax-only directory scan (references/dependencies unresolved). The result is
+    /// incomplete and must not be treated as a clean full analysis (drives the partial-scan exit code).
+    /// </summary>
+    public bool Degraded { get; init; }
 }
 
 /// <summary>The root CBOM document: solution → project → finding.</summary>

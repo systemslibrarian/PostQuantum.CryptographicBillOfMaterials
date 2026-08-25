@@ -92,6 +92,49 @@ public class ScanRunnerIntegrationTests
         Assert.Equal(First(), Second());
     }
 
+    [Fact]
+    public async Task UnknownPolicyProfile_FailsClosed_Exit3()
+    {
+        // A typo'd profile must not silently fall back to 'general' (no floors) — that would weaken the scan.
+        string dir = NewTempDir();
+        await File.WriteAllTextAsync(Path.Combine(dir, "C.cs"),
+            "using System.Security.Cryptography; public class C { public RSA M() => RSA.Create(2048); } ");
+        var options = new ScanOptions
+        {
+            Target = dir, OutputDir = NewTempDir(), Formats = new() { "cyclonedx" },
+            Profile = "cnsa", Quiet = true, // typo for cnsa2
+        };
+
+        Assert.Equal(3, await ScanRunner.RunAsync(options));
+    }
+
+    [Fact]
+    public async Task MissingExplicitBaseline_FailsClosed_Exit3()
+    {
+        string dir = NewTempDir();
+        await File.WriteAllTextAsync(Path.Combine(dir, "C.cs"), "public class C { }");
+        var options = new ScanOptions
+        {
+            Target = dir, OutputDir = NewTempDir(), Formats = new() { "cyclonedx" },
+            BaselinePath = Path.Combine(dir, "does-not-exist.cbom.json"), Quiet = true,
+        };
+
+        Assert.Equal(3, await ScanRunner.RunAsync(options));
+    }
+
+    [Fact]
+    public async Task InvalidSeverityFloorInConfig_FailsClosed_Exit3()
+    {
+        // An unparseable severityFloor would silently drop the intended severity raise — fail closed instead.
+        string dir = NewTempDir();
+        await File.WriteAllTextAsync(Path.Combine(dir, "C.cs"), "public class C { }");
+        await File.WriteAllTextAsync(Path.Combine(dir, "cbom.config.json"),
+            "{ \"rules\": { \"CBOM0001\": { \"severityFloor\": \"hgih\" } } }");
+        var options = new ScanOptions { Target = dir, OutputDir = NewTempDir(), Formats = new() { "cyclonedx" }, Quiet = true };
+
+        Assert.Equal(3, await ScanRunner.RunAsync(options));
+    }
+
     // --- helpers ---
 
     private static byte[] RunToCbom(string targetDir)

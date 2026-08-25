@@ -22,6 +22,13 @@ public sealed class AlgorithmInfo
     public string Basis { get; init; } = "";
 
     public RecommendationData? Recommendation { get; init; }
+
+    /// <summary>
+    /// IDs of the migration playbooks (in <c>playbooks.json</c>) that apply to this algorithm. Empty for
+    /// algorithms that need no migration. RSA appears in both the key-establishment and signature playbooks
+    /// because it is used for both. Referential integrity is enforced by a knowledge-base test.
+    /// </summary>
+    public List<string> MigrationPlaybookIds { get; init; } = new();
 }
 
 /// <summary>Serializable recommendation payload.</summary>

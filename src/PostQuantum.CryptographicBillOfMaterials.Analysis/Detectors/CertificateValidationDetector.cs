@@ -24,8 +24,10 @@ internal sealed class CertificateValidationDetector : DetectorBase
         "CBOM0041", "TLS certificate validation disabled", RuleCategory.Tls, RiskLevel.Critical,
         "Accepting any certificate defeats TLS authentication and enables man-in-the-middle (CWE-295).");
 
+    // Both `callback = (...) => true` and the very common `callback += (...) => true` (event/delegate
+    // subscription, e.g. ServicePointManager.ServerCertificateValidationCallback) must be caught.
     public override IReadOnlyCollection<SyntaxKind> SyntaxKinds { get; } =
-        new[] { SyntaxKind.SimpleAssignmentExpression };
+        new[] { SyntaxKind.SimpleAssignmentExpression, SyntaxKind.AddAssignmentExpression };
 
     public override void Inspect(DetectionContext ctx)
     {

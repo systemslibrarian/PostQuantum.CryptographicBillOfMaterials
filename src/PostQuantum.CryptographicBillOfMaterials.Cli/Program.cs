@@ -169,7 +169,7 @@ internal static class Program
         return diff.NoRegressions ? 0 : 1;
     }
 
-    private static int ValidateCommand(string[] args)
+    internal static int ValidateCommand(string[] args)
     {
         bool schemaOnly = false, profileOnly = false;
         string? path = null;
@@ -188,6 +188,13 @@ internal static class Program
             }
         }
 
+        if (schemaOnly && profileOnly)
+        {
+            // Mutually exclusive: both set would make !profileOnly and !schemaOnly both false, validating
+            // nothing and falsely reporting VALID. Fail closed on the usage error rather than silently pass.
+            Console.Error.WriteLine("error: --schema-only and --profile-only are mutually exclusive.");
+            return 3;
+        }
         if (path is null)
         {
             Console.Error.WriteLine("usage: dotnet-cbom validate <cbom.cbom.json> [--schema-only|--profile-only]");

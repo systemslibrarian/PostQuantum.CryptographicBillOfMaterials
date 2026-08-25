@@ -19,7 +19,7 @@ own trustworthiness, not the crypto it inventories.
 | **Misleading remediation** | Misuse-resistance invariant (unit-tested): no recommendation may yield a less-safe configuration; standards-based options only. |
 | **Author-bias toward own packages** | `PostQuantum.*` packages appear only as one option among standards-based alternatives, never the sole path. |
 | **Malicious / buggy plugin** | Plugins run as in-process code and are explicitly trusted; documented as such. Future: load in a restricted `AssemblyLoadContext`, validate unique rule ids + mandatory basis, isolate exceptions. |
-| **Knowledge-base drift / stale citations** | Verdicts live in reviewed `algorithms.json` with mandatory `basis`; CI re-verifies citation strings against primary sources. DRAFT sources (NIST IR 8547) are labeled as such. |
+| **Knowledge-base drift / stale citations** | Verdicts live in reviewed `algorithms.json` with a mandatory `basis`; drift-guard tests fail the build if rule IDs, severity floors, or formula versions change without updating their snapshots. Citations are reviewed on a documented cadence (see RULE-CHANGELOG.md "Last reviewed"); DRAFT sources (NIST IR 8547) are labeled as such. |
 | **Tampered tool supply chain** | Standard NuGet signing / reproducible build expectations (matches the PostQuantum.* family). |
 
 ## Explicitly out of scope

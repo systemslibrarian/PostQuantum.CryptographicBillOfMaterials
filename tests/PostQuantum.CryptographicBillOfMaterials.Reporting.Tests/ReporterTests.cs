@@ -98,6 +98,90 @@ public sealed class ReporterTests
     }
 
     [Fact]
+    public void Markdown_RendersMigrationPlaybooksWithWorkedCode()
+    {
+        var md = Render(new MarkdownReporter());
+        // The RSA finding must surface both playbooks with concrete, verified .NET 10 API guidance.
+        Assert.Contains("## PQC Migration Playbooks", md);
+        Assert.Contains("Migrate key establishment to ML-KEM", md);
+        Assert.Contains("Migrate digital signatures to ML-DSA", md);
+        Assert.Contains("MLKem.GenerateKey", md);
+        Assert.Contains("MLDsa.GenerateKey", md);
+        Assert.Contains("MLKem.IsSupported", md);
+    }
+
+    [Fact]
+    public void Html_RendersMigrationPlaybooks()
+    {
+        var html = Render(new HtmlReporter());
+        Assert.Contains("PQC migration playbooks", html);
+        Assert.Contains("MLKem.GenerateKey", html);
+    }
+
+    [Fact]
+    public void CycloneDx_EmitsMachineReadablePlaybookPointer()
+    {
+        var json = Render(new CycloneDxReporter());
+        using var doc = JsonDocument.Parse(json);
+        var rsa = doc.RootElement.GetProperty("components").EnumerateArray()
+            .First(c => c.GetProperty("name").GetString() == "RSA");
+        var prop = rsa.GetProperty("properties").EnumerateArray()
+            .First(p => p.GetProperty("name").GetString() == "cbom:migration:playbooks");
+        Assert.Contains("pqc-key-establishment", prop.GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public void CycloneDx_PostQuantumAndStatus_RoundTrip()
+    {
+        // Regression: PostQuantum collapsed to NotVulnerable, and remediation status was never read back.
+        var finding = new CryptoFinding
+        {
+            RuleId = "CBOM0090",
+            Title = "ML-KEM",
+            Category = RuleCategory.PostQuantum,
+            AlgorithmName = "ML-KEM",
+            RiskBasis = "FIPS 203.",
+            QuantumVulnerability = QuantumVulnerability.PostQuantum,
+            Status = RemediationStatus.Waived,
+            Location = new SourceLocation("src/Pqc.cs", 5),
+            BomRef = "crypto/ml-kem/abc123",
+        };
+        var doc = new CbomDocument
+        {
+            Metadata = new ScanMetadata
+            {
+                ToolName = "dotnet-cbom", ToolVersion = "1.0.0", ProfileVersion = "1.0",
+                CycloneDxSpecVersion = "1.6", Timestamp = new DateTimeOffset(2026, 6, 29, 0, 0, 0, TimeSpan.Zero),
+                SolutionName = "S",
+            },
+            Projects = new[] { new ProjectInventory { Name = "P", Findings = new[] { finding } } },
+        };
+
+        using var stream = new MemoryStream();
+        new CycloneDxReporter().Render(doc, stream);
+        stream.Position = 0;
+        CbomDocument readBack = CbomReader.Read(stream);
+
+        CryptoFinding rt = Assert.Single(readBack.AllFindings);
+        Assert.Equal(QuantumVulnerability.PostQuantum, rt.QuantumVulnerability);
+        Assert.Equal(RemediationStatus.Waived, rt.Status);
+    }
+
+    [Fact]
+    public void CbomValidator_DoesNotThrow_OnWrongTypedValues()
+    {
+        // A validator must report malformed input, not crash. specVersion as a number previously threw.
+        const string json = """
+            { "bomFormat": "CycloneDX", "specVersion": 1.6, "metadata": {}, "components": [] }
+            """;
+        var bytes = Encoding.UTF8.GetBytes(json);
+
+        ValidationResult result = CbomValidator.Validate(new MemoryStream(bytes));
+
+        Assert.False(result.IsValid); // specVersion is not the string "1.6"
+    }
+
+    [Fact]
     public void ExecutiveSummary_ContainsScoreAndCounts()
     {
         var md = Render(new ExecutiveSummaryReporter());

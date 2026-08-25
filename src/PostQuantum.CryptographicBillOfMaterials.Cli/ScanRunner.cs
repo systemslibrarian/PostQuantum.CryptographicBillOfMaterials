@@ -35,12 +35,25 @@ internal static class ScanRunner
                 options.Formats = config.Formats.ToList();
         }
 
-        // Resolve the policy profile: CLI --profile wins, then config, else the conservative default.
+        // Resolve the policy profile: CLI --profile wins, then config. Fail closed on an unknown name — a
+        // typo'd `--profile cnsa` must NOT silently fall back to 'general' (which has no severity floors),
+        // because that would produce a *less strict* scan than the user asked for.
         string? requestedProfile = options.Profile ?? config?.Profile;
         if (requestedProfile is not null && !PolicyProfile.IsKnown(requestedProfile))
-            diagnostics.Add($"config: unknown profile '{requestedProfile}'; using 'general'. "
+        {
+            Console.Error.WriteLine($"error: unknown policy profile '{requestedProfile}'. "
                 + $"Known: {string.Join(", ", PolicyProfile.Names)}.");
+            return 3;
+        }
         PolicyProfile profile = PolicyProfile.Get(requestedProfile);
+
+        // An explicitly-requested baseline that does not exist is a usage error — never silently skip the
+        // regression/diff the user asked for (mirrors fail-closed config loading).
+        if (options.BaselinePath is not null && !File.Exists(options.BaselinePath))
+        {
+            Console.Error.WriteLine($"error: baseline file not found: {options.BaselinePath}");
+            return 3;
+        }
 
         string baseDirectory = File.Exists(target) ? Path.GetDirectoryName(target) ?? "." : target;
 
@@ -49,7 +62,18 @@ internal static class ScanRunner
         var engine = new ScanEngine(registry);
 
         if (config is not null)
-            ValidateConfig(config, registry, diagnostics);
+        {
+            try
+            {
+                ValidateConfig(config, registry, diagnostics);
+            }
+            catch (ConfigException ex)
+            {
+                // Fail-closed: a config that would silently lose an intended severity raise is fatal.
+                Console.Error.WriteLine($"error: {ex.Message}");
+                return 3;
+            }
+        }
 
         ResolvedScan resolved;
         try
@@ -86,6 +110,9 @@ internal static class ScanRunner
             }
 
             analyzed++;
+            if (lp.Degraded)
+                diagnostics.Add($"project '{lp.Name}' analyzed in DEGRADED mode (MSBuild load failed; "
+                    + "syntax-only fallback with unresolved references/dependencies — results are incomplete).");
             foreach (string t in lp.TargetFrameworks)
                 frameworks.Add(t);
 
@@ -118,6 +145,7 @@ internal static class ScanRunner
                 Findings = findings,
                 ReadinessScore = readiness.Score,
                 ReadinessTrivial = readiness.Trivial,
+                Degraded = lp.Degraded,
             });
         }
 
@@ -192,19 +220,29 @@ internal static class ScanRunner
         var known = registry.Detectors.Select(d => d.Metadata.RuleId).ToHashSet(StringComparer.Ordinal);
         known.Add(PackageCryptoInventory.RuleId); // manifest-based inventory rule (not a Roslyn detector)
 
+        var fatal = new List<string>();
         if (config.Rules is not null)
         {
             foreach ((string id, RuleConfig rc) in config.Rules)
             {
+                // Unknown rule id and unparseable severityFloor both silently lose an intended raise -> fatal.
                 if (!known.Contains(id))
-                    diagnostics.Add($"config: unknown rule id '{id}'.");
+                    fatal.Add($"unknown rule id '{id}'");
                 if (rc.SeverityFloor is { } sf && Levels.ParseLevel(sf) is null)
-                    diagnostics.Add($"config: invalid severityFloor '{sf}' for rule '{id}'.");
+                    fatal.Add($"invalid severityFloor '{sf}' for rule '{id}'");
+                if (rc.Algorithms is not null)
+                    foreach ((string algo, RuleConfig ac) in rc.Algorithms)
+                        if (ac.SeverityFloor is { } asf && Levels.ParseLevel(asf) is null)
+                            fatal.Add($"invalid severityFloor '{asf}' for rule '{id}' algorithm '{algo}'");
             }
         }
 
         if (config.FailOn is { } failOn && !ValidFailOn.Contains(failOn))
             diagnostics.Add($"config: invalid failOn '{failOn}' (expected critical|high|medium|low|none).");
+
+        if (fatal.Count > 0)
+            throw new ConfigException("config: " + string.Join("; ", fatal)
+                + ". Fix the config (a silently-ignored rule/floor could drop an intended severity raise).");
     }
 
     /// <summary>
@@ -286,7 +324,6 @@ internal static class ScanRunner
             ["sarif"] = new SarifReporter(),
             ["markdown"] = new MarkdownReporter(),
             ["summary"] = new ExecutiveSummaryReporter(),
-            ["json-summary"] = new JsonSummaryReporter(),
             ["html"] = new HtmlReporter(),
         };
 
@@ -313,8 +350,10 @@ internal static class ScanRunner
 
     private static int ComputeExitCode(CbomDocument document, List<CryptoFinding> findings, ScanOptions options)
     {
-        // Fail-closed: a project that didn't analyze is a partial scan (exit 2) unless explicitly allowed.
-        if (document.Metadata.ProjectsFailed > 0 && !options.AllowPartial)
+        // Fail-closed: a project that didn't analyze — or was analyzed only in degraded (MSBuild-fallback)
+        // mode — is a partial scan (exit 2) unless explicitly allowed. A degraded scan is not "clean."
+        if (!options.AllowPartial
+            && (document.Metadata.ProjectsFailed > 0 || document.Projects.Any(p => p.Degraded)))
             return 2;
         if (options.FailOn is { } gate && findings.Count > 0 && findings.Max(f => f.RiskLevel) >= gate)
             return 1;

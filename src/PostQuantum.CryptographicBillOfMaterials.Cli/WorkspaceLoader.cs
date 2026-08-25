@@ -11,7 +11,8 @@ internal sealed record LoadedProject(
     Compilation? Compilation,
     IReadOnlyList<string> TargetFrameworks,
     bool Ok,
-    string? FailureReason = null);
+    string? FailureReason = null,
+    bool Degraded = false);
 
 /// <summary>
 /// Best-effort MSBuild workspace loader. Requires the .NET SDK to be present (design decision §8.3 #2).

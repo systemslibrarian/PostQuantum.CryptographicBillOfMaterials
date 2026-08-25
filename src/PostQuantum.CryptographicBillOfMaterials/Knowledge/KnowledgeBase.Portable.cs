@@ -14,17 +14,7 @@ public sealed partial class KnowledgeBase
     /// <summary>Load the built-in knowledge base using the dependency-free <see cref="MiniJson"/> reader.</summary>
     public static KnowledgeBase LoadPortable()
     {
-        Assembly asm = typeof(KnowledgeBase).Assembly;
-        string resourceName = asm.GetManifestResourceNames()
-            .FirstOrDefault(n => n.EndsWith("algorithms.json", StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException("Embedded algorithms.json resource was not found.");
-
-        string json;
-        using (Stream stream = asm.GetManifestResourceStream(resourceName)!)
-        using (var reader = new StreamReader(stream))
-            json = reader.ReadToEnd();
-
-        var root = (Dictionary<string, object?>)MiniJson.Parse(json)!;
+        var root = ReadEmbeddedObject("algorithms.json");
         string version = AsString(root.GetValueOrDefault("version")) ?? "";
         var algorithms = new List<AlgorithmInfo>();
         if (root.GetValueOrDefault("algorithms") is List<object?> list)
@@ -34,7 +24,59 @@ public sealed partial class KnowledgeBase
                     algorithms.Add(ReadAlgorithm(a));
         }
 
-        return new KnowledgeBase(version, algorithms);
+        var pbRoot = ReadEmbeddedObject("playbooks.json");
+        string playbooksVersion = AsString(pbRoot.GetValueOrDefault("version")) ?? "";
+        var playbooks = new List<MigrationPlaybook>();
+        if (pbRoot.GetValueOrDefault("playbooks") is List<object?> pbList)
+        {
+            foreach (object? item in pbList)
+                if (item is Dictionary<string, object?> pb)
+                    playbooks.Add(ReadPlaybook(pb));
+        }
+
+        return new KnowledgeBase(version, algorithms, playbooksVersion, playbooks);
+    }
+
+    /// <summary>Read an embedded JSON resource by file name and parse it into a MiniJson object.</summary>
+    private static Dictionary<string, object?> ReadEmbeddedObject(string fileName)
+    {
+        Assembly asm = typeof(KnowledgeBase).Assembly;
+        string resourceName = asm.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Embedded {fileName} resource was not found.");
+
+        string json;
+        using (Stream stream = asm.GetManifestResourceStream(resourceName)!)
+        using (var reader = new StreamReader(stream))
+            json = reader.ReadToEnd();
+
+        return (Dictionary<string, object?>)MiniJson.Parse(json)!;
+    }
+
+    /// <summary>
+    /// The analyzer surfaces a playbook's identity and headline guidance, not its full worked code, so this
+    /// reader takes the scalar fields and the ordered steps and leaves approaches and references to the
+    /// System.Text.Json path. Keeping it shallow is deliberate: MiniJson exists to bound the analyzer's
+    /// dependency closure, not to grow a second full deserializer that can drift from the first.
+    /// </summary>
+    private static MigrationPlaybook ReadPlaybook(Dictionary<string, object?> p)
+    {
+        var steps = new List<string>();
+        if (p.GetValueOrDefault("steps") is List<object?> stepList)
+        {
+            foreach (object? s in stepList)
+                if (s is string str)
+                    steps.Add(str);
+        }
+
+        return new MigrationPlaybook
+        {
+            Id = AsString(p.GetValueOrDefault("id")) ?? "",
+            Title = AsString(p.GetValueOrDefault("title")) ?? "",
+            AppliesTo = AsString(p.GetValueOrDefault("appliesTo")) ?? "",
+            Target = AsString(p.GetValueOrDefault("target")) ?? "",
+            Steps = steps,
+        };
     }
 
     private static AlgorithmInfo ReadAlgorithm(Dictionary<string, object?> a) => new()
@@ -49,6 +91,7 @@ public sealed partial class KnowledgeBase
         QuantumThreat = AsEnum<QuantumThreat>(a.GetValueOrDefault("quantumThreat")),
         ClassicalWeakness = AsEnum<ClassicalWeakness>(a.GetValueOrDefault("classicalWeakness")),
         Basis = AsString(a.GetValueOrDefault("basis")) ?? "",
+        MigrationPlaybookIds = AsStringList(a.GetValueOrDefault("migrationPlaybookIds")),
         Recommendation = a.GetValueOrDefault("recommendation") is Dictionary<string, object?> r
             ? ReadRecommendation(r)
             : null,
@@ -82,6 +125,18 @@ public sealed partial class KnowledgeBase
     }
 
     private static string? AsString(object? v) => v as string;
+
+    private static List<string> AsStringList(object? v)
+    {
+        var result = new List<string>();
+        if (v is List<object?> list)
+        {
+            foreach (object? item in list)
+                if (item is string s)
+                    result.Add(s);
+        }
+        return result;
+    }
 
     private static int? AsInt(object? v) => v is double d ? (int)d : (int?)null;
 

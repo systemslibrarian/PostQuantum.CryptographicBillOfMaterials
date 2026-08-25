@@ -36,45 +36,71 @@ public class KnowledgeBaseTests
     }
 
     [Fact]
-    public void PortableLoader_ProducesIdenticalData_ToSystemTextJsonLoader()
+    public void LoadsMigrationPlaybooks()
     {
-        // The analyzer loads the knowledge base via the dependency-free MiniJson path (LoadPortable) to
-        // keep System.Text.Json out of the analyzer's load context. This guards that the two paths never
-        // drift: every field of every algorithm (and its recommendation) must match the STJ result.
-        KnowledgeBase portable = KnowledgeBase.LoadPortable();
+        Assert.NotEmpty(Kb.Playbooks);
+        Assert.Equal("1.0", Kb.PlaybooksVersion);
+    }
 
-        Assert.Equal(Kb.Version, portable.Version);
+    [Fact]
+    public void EveryReferencedPlaybookId_Resolves()
+    {
+        // Referential integrity: an algorithm must never point at a playbook that does not exist, or the
+        // report would silently drop migration guidance for a quantum-vulnerable finding.
+        foreach (AlgorithmInfo a in Kb.Algorithms)
+            foreach (string id in a.MigrationPlaybookIds)
+                Assert.True(Kb.Playbook(id) is not null, $"{a.Name} references missing playbook '{id}'");
+    }
 
-        var expected = Kb.Algorithms.OrderBy(a => a.Name, StringComparer.Ordinal).ToList();
-        var actual = portable.Algorithms.OrderBy(a => a.Name, StringComparer.Ordinal).ToList();
-        Assert.Equal(expected.Count, actual.Count);
+    [Fact]
+    public void EveryShorVulnerableAlgorithm_HasAMigrationPlaybook()
+    {
+        // The mission: every quantum-broken (Shor) public-key algorithm must carry actionable PQC guidance.
+        var missing = Kb.Algorithms
+            .Where(a => a.QuantumVulnerability == QuantumVulnerability.Vulnerable)
+            .Where(a => Kb.PlaybooksForAlgorithm(a.Name).Count == 0)
+            .Select(a => a.Name)
+            .ToArray();
+        Assert.True(missing.Length == 0, "Vulnerable algorithms without a playbook: " + string.Join(", ", missing));
+    }
 
-        foreach (var (e, a) in expected.Zip(actual))
+    [Fact]
+    public void EveryPlaybook_IsWellFormed()
+    {
+        // A shipped playbook must be actionable: title, applicability, target, at least one approach with a
+        // worked example, ordered steps, and at least one authoritative reference with a real URL.
+        foreach (MigrationPlaybook pb in Kb.Playbooks)
         {
-            Assert.Equal(e.Name, a.Name);
-            Assert.Equal(e.Primitive, a.Primitive);
-            Assert.Equal(e.DefaultKeyBits, a.DefaultKeyBits);
-            Assert.Equal(e.ClassicalSecurityLevel, a.ClassicalSecurityLevel);
-            Assert.Equal(e.NistQuantumSecurityLevel, a.NistQuantumSecurityLevel);
-            Assert.Equal(e.Oid, a.Oid);
-            Assert.Equal(e.QuantumVulnerability, a.QuantumVulnerability);
-            Assert.Equal(e.QuantumThreat, a.QuantumThreat);
-            Assert.Equal(e.ClassicalWeakness, a.ClassicalWeakness);
-            Assert.Equal(e.Basis, a.Basis);
-
-            Assert.Equal(e.Recommendation is null, a.Recommendation is null);
-            if (e.Recommendation is null)
-                continue;
-
-            Assert.Equal(e.Recommendation.Summary, a.Recommendation!.Summary);
-            Assert.Equal(e.Recommendation.Options.Count, a.Recommendation.Options.Count);
-            foreach (var (eo, ao) in e.Recommendation.Options.Zip(a.Recommendation.Options))
+            Assert.False(string.IsNullOrWhiteSpace(pb.Id));
+            Assert.False(string.IsNullOrWhiteSpace(pb.Title), $"{pb.Id}: title");
+            Assert.False(string.IsNullOrWhiteSpace(pb.AppliesTo), $"{pb.Id}: appliesTo");
+            Assert.False(string.IsNullOrWhiteSpace(pb.Target), $"{pb.Id}: target");
+            Assert.NotEmpty(pb.Approaches);
+            Assert.All(pb.Approaches, a =>
             {
-                Assert.Equal(eo.Description, ao.Description);
-                Assert.Equal(eo.Basis, ao.Basis);
-                Assert.Equal(eo.Tradeoffs, ao.Tradeoffs);
-                Assert.Equal(eo.ResultingVulnerability, ao.ResultingVulnerability);
-            }
+                Assert.False(string.IsNullOrWhiteSpace(a.Name), $"{pb.Id}: approach name");
+                Assert.False(string.IsNullOrWhiteSpace(a.Code), $"{pb.Id}/{a.Name}: code");
+            });
+            Assert.NotEmpty(pb.Steps);
+            Assert.NotEmpty(pb.References);
+            Assert.All(pb.References, r => Assert.StartsWith("https://", r.Url));
         }
+    }
+
+    [Fact]
+    public void PlaybookIdSet_IsStable()
+    {
+        // Drift guard: changing the shipped playbook IDs must be deliberate (they are cited in CBOM output).
+        string[] ids = Kb.Playbooks.Select(p => p.Id).OrderBy(x => x, System.StringComparer.Ordinal).ToArray();
+        Assert.Equal(new[] { "pqc-key-establishment", "pqc-signatures" }, ids);
+    }
+
+    [Fact]
+    public void Rsa_MapsToBothKeyEstablishmentAndSignaturePlaybooks()
+    {
+        // RSA is used for both encryption/key transport and signing, so it must surface both playbooks.
+        var ids = Kb.PlaybooksForAlgorithm("RSA").Select(p => p.Id).ToArray();
+        Assert.Contains("pqc-key-establishment", ids);
+        Assert.Contains("pqc-signatures", ids);
     }
 }

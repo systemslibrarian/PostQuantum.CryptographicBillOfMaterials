@@ -95,20 +95,26 @@ public sealed class SarifReporter : IReportRenderer
             {
                 new Dictionary<string, object?>
                 {
-                    ["physicalLocation"] = new Dictionary<string, object?>
-                    {
-                        ["artifactLocation"] = new Dictionary<string, object?>
-                        {
-                            ["uri"] = finding.Location.FilePath,
-                        },
-                        ["region"] = new Dictionary<string, object?>
-                        {
-                            ["startLine"] = finding.Location.Line,
-                        },
-                    },
+                    ["physicalLocation"] = PhysicalLocation(finding),
                 },
             },
         };
+    }
+
+    private static Dictionary<string, object?> PhysicalLocation(CryptoFinding finding)
+    {
+        // SARIF 2.1.0 requires region.startLine >= 1 and a valid URI reference (forward slashes). Omit the
+        // region when the line is unknown (< 1) rather than emit a schema-invalid startLine of 0.
+        var physical = new Dictionary<string, object?>
+        {
+            ["artifactLocation"] = new Dictionary<string, object?>
+            {
+                ["uri"] = finding.Location.FilePath.Replace('\\', '/'),
+            },
+        };
+        if (finding.Location.Line >= 1)
+            physical["region"] = new Dictionary<string, object?> { ["startLine"] = finding.Location.Line };
+        return physical;
     }
 
     private static string Level(RiskLevel level) => level switch

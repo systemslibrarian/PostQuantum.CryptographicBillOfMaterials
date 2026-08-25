@@ -163,7 +163,9 @@ internal static class ConfigApplication
             if (disabled)
             {
                 bool justified = !string.IsNullOrWhiteSpace(effective?.WaiverJustification);
-                bool expired = TryParseDate(effective?.WaiverExpiry, out DateOnly exp) && exp < today;
+                bool hasExpiryString = !string.IsNullOrWhiteSpace(effective?.WaiverExpiry);
+                bool validDate = TryParseDate(effective?.WaiverExpiry, out DateOnly exp);
+                bool expired = hasExpiryString && (!validDate || exp < today);
 
                 // Misuse-resistance (TDD §0): a waiver may only suppress a finding when it is JUSTIFIED and
                 // not expired. An unjustified disable cannot quietly remove findings — it is retained and
@@ -181,7 +183,10 @@ internal static class ConfigApplication
                     diagnostics.Add($"config: rule {f.RuleId} disabled without a waiverJustification; finding RETAINED "
                         + "(a waiver must be justified to suppress).");
                 else if (expired)
-                    diagnostics.Add($"config: waiver for {f.RuleId} expired {effective?.WaiverExpiry}; finding re-activated.");
+                {
+                    string msg = validDate ? $"expired {effective?.WaiverExpiry}" : $"has malformed expiry '{effective?.WaiverExpiry}'";
+                    diagnostics.Add($"config: waiver for {f.RuleId} {msg}; finding re-activated.");
+                }
 
                 f = f with
                 {
@@ -277,10 +282,19 @@ internal static class ConfigApplication
         Dictionary<string, WaiverRecord> waivers, string ruleId, RuleConfig? rc, bool suppress, bool expired)
     {
         if (waivers.TryGetValue(ruleId, out WaiverRecord? existing))
-            waivers[ruleId] = existing with { Count = existing.Count + 1 };
+        {
+            waivers[ruleId] = existing with
+            {
+                Count = existing.Count + 1,
+                Suppressed = existing.Suppressed || suppress,
+                Expired = existing.Expired && expired
+            };
+        }
         else
+        {
             waivers[ruleId] = new WaiverRecord(
                 ruleId, rc?.WaiverJustification, rc?.WaiverApprover, rc?.WaiverExpiry, suppress, expired, 1);
+        }
     }
 
     private static bool TryParseDate(string? value, out DateOnly date) =>

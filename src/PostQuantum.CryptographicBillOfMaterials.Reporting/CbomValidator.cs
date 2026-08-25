@@ -118,7 +118,11 @@ public static class CbomValidator
 
     private static void RequireString(JsonElement root, string name, string expected, string path, List<ValidationIssue> issues)
     {
-        string? actual = root.TryGetProperty(name, out JsonElement e) ? e.GetString() : null;
+        // Guard the kind: GetString() throws on a non-string JSON value (e.g. specVersion: 1.6 as a number).
+        // A validator must report malformed input, never crash on it.
+        string? actual = root.TryGetProperty(name, out JsonElement e) && e.ValueKind == JsonValueKind.String
+            ? e.GetString()
+            : null;
         if (actual != expected)
             issues.Add(new ValidationIssue("error", path, $"Expected {name}='{expected}', found '{actual ?? "(missing)"}'."));
     }
@@ -131,7 +135,9 @@ public static class CbomValidator
     }
 
     private static bool HasNonEmptyString(JsonElement obj, string name) =>
-        obj.TryGetProperty(name, out JsonElement e) && !string.IsNullOrEmpty(e.GetString());
+        obj.TryGetProperty(name, out JsonElement e)
+        && e.ValueKind == JsonValueKind.String
+        && !string.IsNullOrEmpty(e.GetString());
 
     private static IReadOnlyDictionary<string, string> ReadProperties(JsonElement owner)
     {
@@ -142,7 +148,9 @@ public static class CbomValidator
         {
             foreach (JsonElement p in props.EnumerateArray())
             {
-                if (p.TryGetProperty("name", out JsonElement n) && p.TryGetProperty("value", out JsonElement v))
+                if (p.ValueKind == JsonValueKind.Object
+                    && p.TryGetProperty("name", out JsonElement n) && n.ValueKind == JsonValueKind.String
+                    && p.TryGetProperty("value", out JsonElement v) && v.ValueKind == JsonValueKind.String)
                     result[n.GetString() ?? ""] = v.GetString() ?? "";
             }
         }

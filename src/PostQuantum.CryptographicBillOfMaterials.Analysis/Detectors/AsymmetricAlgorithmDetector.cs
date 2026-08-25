@@ -40,7 +40,9 @@ internal sealed class AsymmetricAlgorithmDetector : DetectorBase
         ClassicalWeakness? classicalOverride = null;
         if (name is "RSA" or "DSA" && keySize is int k)
         {
-            if (k < 1024)
+            // <=1024-bit is ~80-bit-or-less strength: factorable by well-resourced adversaries and disallowed
+            // by NIST SP 800-131A — classically Broken, not merely Deprecated. 1025..2047 is Deprecated.
+            if (k <= 1024)
                 classicalOverride = ClassicalWeakness.Broken;
             else if (k < 2048)
                 classicalOverride = ClassicalWeakness.Deprecated;

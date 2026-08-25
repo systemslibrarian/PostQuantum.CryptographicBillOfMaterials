@@ -36,6 +36,7 @@ internal static class SampleDocuments
                 {
                     new("Adopt ML-KEM-768", "FIPS 203", "Larger keys", QuantumVulnerability.PostQuantum),
                 }),
+            MigrationPlaybookIds = new[] { "pqc-key-establishment", "pqc-signatures" },
             Location = new SourceLocation("src/Auth/KeyExchange.cs", 42),
             BomRef = "rsa-keyexchange-42",
         };

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using PostQuantum.CryptographicBillOfMaterials.Knowledge;
 using PostQuantum.CryptographicBillOfMaterials.Model;
 
 namespace PostQuantum.CryptographicBillOfMaterials.Reporting;
@@ -7,6 +8,9 @@ namespace PostQuantum.CryptographicBillOfMaterials.Reporting;
 /// <summary>Renders a self-contained, dependency-free HTML report (inline CSS).</summary>
 public sealed class HtmlReporter : IReportRenderer
 {
+    // Embedded, deterministic migration-playbook knowledge; keeps rendering a pure function of the inputs.
+    private static readonly KnowledgeBase Knowledge = KnowledgeBase.LoadDefault();
+
     public string FormatName => "html";
     public string FileExtension => ".html";
 
@@ -111,6 +115,8 @@ public sealed class HtmlReporter : IReportRenderer
         }
         sb.AppendLine("</tbody></table>");
 
+        AppendMigrationPlaybooks(sb, document);
+
         // Waivers
         var waivers = document.Metadata.AppliedConfig?.Waivers;
         if (waivers is { Count: > 0 })
@@ -134,6 +140,60 @@ public sealed class HtmlReporter : IReportRenderer
         using var writer = new StreamWriter(output, new UTF8Encoding(false), leaveOpen: true);
         writer.Write(sb.ToString());
         writer.Flush();
+    }
+
+    /// <summary>
+    /// Renders concrete .NET PQC migration playbooks for the quantum-vulnerable algorithms found, driven by
+    /// the playbook IDs baked into each finding. Gives a non-cryptographer actionable options and worked code.
+    /// </summary>
+    private static void AppendMigrationPlaybooks(StringBuilder sb, CbomDocument document)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var playbooks = new List<MigrationPlaybook>();
+        foreach (CryptoFinding f in document.AllFindings)
+            foreach (string id in f.MigrationPlaybookIds)
+                if (seen.Add(id) && Knowledge.Playbook(id) is { } pb)
+                    playbooks.Add(pb);
+
+        if (playbooks.Count == 0)
+            return;
+
+        sb.AppendLine("<h2>PQC migration playbooks</h2>");
+        sb.AppendLine("<p>Concrete, standards-based migration guidance for the quantum-vulnerable algorithms "
+            + "above: .NET implementation options, worked code, caveats, and ordered steps.</p>");
+
+        foreach (MigrationPlaybook pb in playbooks)
+        {
+            sb.AppendLine($"<details class=\"playbook\" open><summary><b>{E(pb.Title)}</b></summary>");
+            sb.AppendLine($"<p><b>Applies to:</b> {E(pb.AppliesTo)}</p>");
+            sb.AppendLine($"<p><b>Target state:</b> {E(pb.Target)}</p>");
+
+            foreach (MigrationApproach a in pb.Approaches)
+            {
+                sb.AppendLine($"<h4>{E(a.Name)}</h4>");
+                sb.AppendLine($"<p><b>Availability:</b> {E(a.Status)}<br><b>Best for:</b> {E(a.RecommendedFor)}"
+                    + (string.IsNullOrWhiteSpace(a.Caveats) ? string.Empty : $"<br><b>Caveats:</b> {E(a.Caveats)}")
+                    + "</p>");
+                if (!string.IsNullOrWhiteSpace(a.Code))
+                    sb.AppendLine($"<pre><code>{E(a.Code)}</code></pre>");
+            }
+
+            if (pb.Steps.Count > 0)
+            {
+                sb.AppendLine("<p><b>Migration steps</b></p><ol>");
+                foreach (string step in pb.Steps)
+                    sb.AppendLine($"<li>{E(step)}</li>");
+                sb.AppendLine("</ol>");
+            }
+
+            if (pb.References.Count > 0)
+            {
+                sb.AppendLine("<p><b>References:</b> "
+                    + string.Join(" · ", pb.References.Select(r => $"<a href=\"{E(r.Url)}\">{E(r.Title)}</a>"))
+                    + "</p>");
+            }
+            sb.AppendLine("</details>");
+        }
     }
 
     private static string QuantumLabel(CryptoFinding f) => f.QuantumVulnerability switch
@@ -161,5 +221,9 @@ public sealed class HtmlReporter : IReportRenderer
         + ".sev-High{color:#c84400}.pill.sev-High{background:#c84400}"
         + ".sev-Medium{color:#9a7400}.pill.sev-Medium{background:#9a7400}"
         + ".pill.sev-Low{background:#5a7d9a}.pill.sev-Informational{background:#6b6b6b}"
+        + ".playbook{border:1px solid #e3e3e8;border-radius:10px;padding:.6rem 1rem;margin:.8rem 0;background:#fcfcfd}"
+        + ".playbook summary{cursor:pointer;font-size:1.05rem}.playbook h4{margin:.9rem 0 .3rem}"
+        + "pre{background:#0f1117;color:#e6e6e6;padding:1rem;border-radius:8px;overflow:auto;font-size:.82rem;line-height:1.4}"
+        + "pre code{background:none;color:inherit;padding:0}"
         + ".footer{color:#777;border-top:1px solid #eee;padding-top:1rem;margin-top:1.5rem;font-style:italic}";
 }

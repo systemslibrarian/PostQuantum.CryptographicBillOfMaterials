@@ -52,6 +52,14 @@ public sealed record CryptoFinding
 
     public Recommendation Recommendation { get; init; } = Recommendation.None;
 
+    /// <summary>
+    /// IDs of the PQC migration playbooks (in the knowledge base's <c>playbooks.json</c>) that apply to this
+    /// finding's algorithm. Resolved from the canonical algorithm at scan time and baked in so the CBOM is
+    /// self-contained: reporters render the full playbook from these IDs, and a machine-readable pointer
+    /// rides along in the CycloneDX output. Empty for findings that need no PQC migration.
+    /// </summary>
+    public IReadOnlyList<string> MigrationPlaybookIds { get; init; } = Array.Empty<string>();
+
     public required SourceLocation Location { get; init; }
 
     /// <summary>Stable CycloneDX bom-ref (normalized location + symbol hash).</summary>

@@ -40,8 +40,11 @@ internal static class TargetResolver
                     diagnostics.Add($"MSBuild load failed ({ex.Message}); falling back to directory scan.");
                 }
 
+                // The fallback is a degraded, syntax-only scan of a target the user expected MSBuild to load
+                // fully (references/dependencies unresolved) — flag it so it is never reported as a clean,
+                // complete analysis (exit 2 unless --allow-partial), not silently presented as success.
                 string dir = Path.GetDirectoryName(Path.GetFullPath(target)) ?? ".";
-                return LooseDirectory(dir, name);
+                return LooseDirectory(dir, name, degraded: true);
             }
 
             // .cs or any other single file.
@@ -54,16 +57,16 @@ internal static class TargetResolver
         throw new FileNotFoundException($"Scan target not found: {target}");
     }
 
-    private static ResolvedScan LooseDirectory(string dir, string name)
+    private static ResolvedScan LooseDirectory(string dir, string name, bool degraded = false)
     {
         var files = Directory
             .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
             .Where(p => !HasSegment(p, "bin") && !HasSegment(p, "obj") && !HasSegment(p, ".git"))
             .ToList();
-        return LooseFiles(files, name, dir);
+        return LooseFiles(files, name, dir, degraded);
     }
 
-    private static ResolvedScan LooseFiles(IReadOnlyCollection<string> files, string name, string? dir)
+    private static ResolvedScan LooseFiles(IReadOnlyCollection<string> files, string name, string? dir, bool degraded = false)
     {
         if (files.Count == 0)
         {
@@ -76,7 +79,7 @@ internal static class TargetResolver
         var compilation = CompilationFactory.FromFiles(name, files);
         return new ResolvedScan(name, new[]
         {
-            new LoadedProject(name, dir, compilation, Array.Empty<string>(), Ok: true),
+            new LoadedProject(name, dir, compilation, Array.Empty<string>(), Ok: true, Degraded: degraded),
         });
     }
 

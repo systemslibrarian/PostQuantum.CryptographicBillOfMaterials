@@ -14,8 +14,9 @@ namespace PostQuantum.CryptographicBillOfMaterials.Reporting;
 /// <c>evidence.occurrences</c> and detection confidence in <c>evidence.identity</c>.
 /// All PQC posture and risk data that CycloneDX has no native field for is emitted as a profile
 /// extension via <c>properties</c> entries under the <c>cbom:</c> namespace.
-/// The <c>serialNumber</c> is a deterministic UUID derived from the solution name + timestamp,
-/// so re-running the same scan produces byte-identical output.
+/// The <c>serialNumber</c> is a deterministic UUID derived from the solution name + timestamp, so a scan
+/// is byte-identical given identical inputs (including the recorded <c>metadata.timestamp</c>); the
+/// timestamp itself is wall-clock per run, so two live runs differ only in their timestamp-derived fields.
 /// </remarks>
 public sealed class CycloneDxReporter : IReportRenderer
 {
@@ -157,7 +158,7 @@ public sealed class CycloneDxReporter : IReportRenderer
                 ["curve"] = finding.Curve,
                 ["mode"] = MapEnum(finding.Mode, ValidModes),
                 ["padding"] = MapEnum(finding.Padding, ValidPaddings),
-                ["classicalSecurityLevel"] = finding.ClassicalSecurityLevel,
+                ["classicalSecurityLevel"] = NonNegative(finding.ClassicalSecurityLevel),
                 ["nistQuantumSecurityLevel"] = ClampNist(finding.NistQuantumSecurityLevel),
             });
 
@@ -229,6 +230,12 @@ public sealed class CycloneDxReporter : IReportRenderer
         if (finding.WaiverExpiry is { } we)
             properties.Add(Property("cbom:waiver:expiry", we));
 
+        // Machine-readable pointer to the applicable PQC migration playbook(s); the full playbook content
+        // lives in the tool's knowledge base (cbom:knowledgeBase:version records which one) and is rendered
+        // in the Markdown/HTML reports. This keeps the BOM small while remaining traceable.
+        if (finding.MigrationPlaybookIds.Count > 0)
+            properties.Add(Property("cbom:migration:playbooks", string.Join(",", finding.MigrationPlaybookIds)));
+
         if (finding.Recommendation.Options.Count > 0)
         {
             properties.Add(Property("cbom:recommendation:summary", finding.Recommendation.Summary));
@@ -273,6 +280,10 @@ public sealed class CycloneDxReporter : IReportRenderer
 
     private static int? ClampNist(int? level) => level is null ? null : Math.Clamp(level.Value, 0, 6);
 
+    // The official schema sets minimum:0 on classicalSecurityLevel; omit a negative value rather than emit
+    // schema-invalid output (symmetric with ClampNist).
+    private static int? NonNegative(int? value) => value is { } v && v >= 0 ? v : null;
+
     private static Dictionary<string, object?> Property(string name, string value) =>
         new() { ["name"] = name, ["value"] = value };
 
@@ -303,8 +314,9 @@ public sealed class CycloneDxReporter : IReportRenderer
     {
         QuantumVulnerability.Vulnerable => "true",
         QuantumVulnerability.ReducedMargin => "reduced-margin",
+        // Distinct from "false" so the post-quantum positive signal survives a CBOM round-trip (CbomReader).
+        QuantumVulnerability.PostQuantum => "post-quantum",
         QuantumVulnerability.NotVulnerable => "false",
-        QuantumVulnerability.PostQuantum => "false",
         _ => "false",
     };
 

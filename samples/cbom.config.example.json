@@ -1,5 +1,6 @@
 {
-  "// docs": "Example cbom.config.json. CLI flags override these; this overrides built-in defaults.",
+  // Example cbom.config.json. CLI flags override these; this overrides built-in defaults.
+  // The loader supports // line comments and trailing commas.
   "profile": "general",
   "include": ["src/**"],
   "exclude": ["**/*.Tests/**", "**/Generated/**", "**/obj/**", "**/bin/**"],
@@ -9,14 +10,15 @@
   "rules": {
     "CBOM0002": { "severityFloor": "critical" },
 
-    "// per-algorithm tuning": "Tune one algorithm without disabling the whole rule.",
+    // Per-algorithm tuning: tune one algorithm without disabling the whole rule.
     "CBOM0010": {
       "algorithms": {
         "MD5": { "severityFloor": "critical" }
       }
     },
 
-    "// auditable waiver": "Disabling a rule is a recorded waiver. Under the 'audit' profile it annotates instead of suppressing; an expired waiver re-activates the finding.",
+    // Auditable waiver: disabling a rule is a recorded waiver. Under the 'audit' profile it
+    // annotates instead of suppressing; an expired waiver re-activates the finding.
     "CBOM0050": {
       "enabled": false,
       "waiverJustification": "System.Random used only for non-security jitter; reviewed.",
@@ -25,7 +27,8 @@
     }
   },
 
-  "// data sensitivity": "Long-lived confidentiality protected by quantum-vulnerable crypto is the top HNDL priority. Match by path glob, or by namespace with an 'ns:' key.",
+  // Data sensitivity: long-lived confidentiality protected by quantum-vulnerable crypto is the top
+  // harvest-now-decrypt-later priority. Match by path glob, or by namespace with an 'ns:' key.
   "dataSensitivityHints": {
     "src/Payments/**": { "dataLifetimeYears": 25, "dataClass": "financial" },
     "ns:Contoso.Billing.*": { "dataLifetimeYears": 30, "dataClass": "regulated" }

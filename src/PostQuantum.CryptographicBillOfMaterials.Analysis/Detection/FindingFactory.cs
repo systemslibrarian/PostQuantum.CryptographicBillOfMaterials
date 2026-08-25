@@ -82,8 +82,11 @@ internal static class FindingFactory
             RiskScore = risk.Score,
             RiskBasis = info.Basis,
             Recommendation = recommendation,
+            MigrationPlaybookIds = info.MigrationPlaybookIds.Count > 0
+                ? info.MigrationPlaybookIds.ToArray()
+                : Array.Empty<string>(),
             Location = location,
-            BomRef = BomRef.Create(display, location, meta.RuleId),
+            BomRef = BomRef.Create(display, location.FilePath, meta.RuleId),
         };
     }
 
@@ -146,7 +149,7 @@ internal static class FindingFactory
             RiskBasis = basis,
             Recommendation = recommendation,
             Location = location,
-            BomRef = BomRef.Create(displayName, location, meta.RuleId),
+            BomRef = BomRef.Create(displayName, location.FilePath, meta.RuleId),
         };
     }
 

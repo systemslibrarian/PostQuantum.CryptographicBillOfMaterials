@@ -17,37 +17,25 @@ and the CLI footer so a clean result is never mistaken for a clean system.
 
 ## Current implementation status
 
-The full detector list and bases are in [RULES.md](RULES.md). Implemented: **16 rules** — symmetric,
+The full detector list and bases are in [RULES.md](RULES.md). Implemented: **17 rules** (16 Roslyn detectors
++ the CBOM0081 package-manifest inventory) — symmetric,
 asymmetric, AES-128-via-property, ECB, hashes, JWT validation bypass, **JWT alg=none / weak HMAC key**,
 hardcoded keys/IVs, deprecated TLS, disabled cert validation, **X.509 certificate inventory**, weak RNG
 (**context-elevated**), KDF, **cloud-KMS inventory + key-spec depth**, **Bouncy Castle inventory**,
-**package-manifest dependency inventory**, and PQC positive. Reporting: CycloneDX 1.6, SARIF 2.1.0,
-Markdown, HTML, executive summary, and CBOM **diff/baseline** — now as **audit packets** (top migration
-actions, what-changed-since-baseline, waivers). Plus `dotnet-cbom validate` against the **official
+**package-manifest dependency inventory**, and PQC positive. Each Shor-vulnerable finding also carries a
+**PQC migration playbook** (worked .NET 10 `MLKem`/`MLDsa`/`SlhDsa` code, hybrid/TLS/BouncyCastle options,
+caveats, steps). Reporting: CycloneDX 1.6, SARIF 2.1.0, Markdown, HTML, executive summary, and CBOM
+**diff/baseline** — as **audit packets** (top migration actions, what-changed-since-baseline, waivers).
+Plus `dotnet-cbom validate` against the **official
 CycloneDX 1.6 JSON Schema** + the `cbom:` profile; **policy profiles** (general/federal/cnsa2/audit/
 developer); `cbom.config.json` (waivers with justification/approver/expiry, raise-only severity floors,
 **per-algorithm** tuning, globs, path + **namespace** `dataSensitivityHints`); deterministic SourceLinked
 packaging; a **tool SBOM**; an official **GitHub Action** + Azure/GitLab examples; and CI that self-scans
 and schema-validates on every run.
 
-### Resolved (previously listed here)
+### Remaining gaps (not inherent)
 
-- **Full JSON-Schema validation** — now validates against the bundled official `bom-1.6.schema.json`
-  (+spdx/jsf) in `validate` and CI.
-- **AES key size via property** — `aes.KeySize = 128` is tracked (CBOM0003).
-- **JOSE `alg=none` literals + weak HMAC keys** — CBOM0022.
-- **Cloud KMS depth** — classical asymmetric KMS keys flagged (CBOM0070).
-- **Bouncy Castle / dependency-aware inventory** — CBOM0080 + CBOM0081 (package manifest).
-- **X.509 certificate inventory** — CBOM0042.
-- **Weak-RNG context** — elevated when material flows into keys/tokens/IVs/nonces (CBOM0050).
-- **Per-project load-failure reasons**, `--restore`/`--no-restore`/`--msbuild-property`.
-- **Per-algorithm rule granularity** — `rules.<id>.algorithms.<name>`.
-- **Supply chain** — tool SBOM, compatibility matrix, deterministic/SourceLinked pack, signing wired in
-  the release workflow.
-
-### Remaining gaps in *this build* (not inherent)
-
-- **Dataflow is intra-method only.** Weak-RNG → key/IV/nonce flow now uses a real intra-procedural taint
+- **Dataflow is intra-method only.** Weak-RNG → key/IV/nonce flow uses a real intra-procedural taint
   analysis (`CryptoTaintAnalysis`, see [ADR 0002](adr/0002-intra-method-taint-for-key-material.md)), not
   identifier names. It does **not** follow values across method boundaries or constructor injection, branch
   /loop semantics are approximated by a linear pass, and only `System.Random`/`Random.Shared` are sources.

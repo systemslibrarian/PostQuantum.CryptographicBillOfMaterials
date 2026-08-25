@@ -1,4 +1,5 @@
 using System.Text;
+using PostQuantum.CryptographicBillOfMaterials.Knowledge;
 using PostQuantum.CryptographicBillOfMaterials.Model;
 
 namespace PostQuantum.CryptographicBillOfMaterials.Reporting;
@@ -53,6 +54,7 @@ public sealed class MarkdownReporter : IReportRenderer
         AppendReadiness(sb, document);
         AppendFindings(sb, document);
         AppendWaivers(sb, document);
+        AppendMigrationPlaybooks(sb, document);
 
         sb.AppendLine(Footer);
 
@@ -135,6 +137,12 @@ public sealed class MarkdownReporter : IReportRenderer
         sb.AppendLine($"- **Solution Readiness:** {document.SolutionReadinessScore}/100");
         foreach (var project in document.Projects)
         {
+            if (!project.Analyzed)
+            {
+                // A project that failed to load is unknown, not a real 0/100 — never present it as a score.
+                sb.AppendLine($"- **{project.Name}:** not analyzed (unknown, not clean)");
+                continue;
+            }
             var trivial = project.ReadinessTrivial ? " (trivial: no quantum-relevant crypto)" : string.Empty;
             sb.AppendLine($"- **{project.Name}:** {project.ReadinessScore}/100{trivial}");
         }
@@ -188,6 +196,87 @@ public sealed class MarkdownReporter : IReportRenderer
             }
 
             sb.AppendLine();
+        }
+    }
+
+    // Loaded once: the embedded migration-playbook knowledge is deterministic, so rendering stays a pure
+    // function of (document + knowledge base). The KB version is recorded in scan metadata for reproducibility.
+    private static readonly KnowledgeBase Knowledge = KnowledgeBase.LoadDefault();
+
+    /// <summary>
+    /// Appends concrete .NET PQC migration playbooks for every quantum-vulnerable algorithm present in the
+    /// findings. Driven entirely by the knowledge base's algorithm→playbook mapping, deduplicated, so a
+    /// non-cryptographer gets actionable library options, worked code, and steps — not just a one-line label.
+    /// </summary>
+    private static void AppendMigrationPlaybooks(StringBuilder sb, CbomDocument document)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var playbooks = new List<MigrationPlaybook>();
+        foreach (CryptoFinding f in document.AllFindings)
+        {
+            foreach (string id in f.MigrationPlaybookIds)
+            {
+                if (seen.Add(id) && Knowledge.Playbook(id) is { } pb)
+                    playbooks.Add(pb);
+            }
+        }
+
+        if (playbooks.Count == 0)
+            return;
+
+        sb.AppendLine("## PQC Migration Playbooks");
+        sb.AppendLine();
+        sb.AppendLine("Concrete, standards-based migration guidance for the quantum-vulnerable algorithms found "
+            + "above. Each playbook lists .NET implementation options, worked code, caveats, and ordered steps.");
+        sb.AppendLine();
+
+        foreach (MigrationPlaybook pb in playbooks)
+        {
+            sb.AppendLine($"### {pb.Title}");
+            sb.AppendLine();
+            sb.AppendLine($"**Applies to:** {pb.AppliesTo}");
+            sb.AppendLine();
+            sb.AppendLine($"**Target state:** {pb.Target}");
+            sb.AppendLine();
+
+            foreach (MigrationApproach a in pb.Approaches)
+            {
+                sb.AppendLine($"#### {a.Name}");
+                sb.AppendLine();
+                sb.AppendLine($"- **Availability:** {a.Status}");
+                sb.AppendLine($"- **Best for:** {a.RecommendedFor}");
+                if (!string.IsNullOrWhiteSpace(a.Caveats))
+                    sb.AppendLine($"- **Caveats:** {a.Caveats}");
+                sb.AppendLine();
+                if (!string.IsNullOrWhiteSpace(a.Code))
+                {
+                    string lang = string.IsNullOrWhiteSpace(a.Language) ? "text" : a.Language;
+                    sb.AppendLine($"```{lang}");
+                    sb.AppendLine(a.Code);
+                    sb.AppendLine("```");
+                    sb.AppendLine();
+                }
+            }
+
+            if (pb.Steps.Count > 0)
+            {
+                sb.AppendLine("**Migration steps**");
+                sb.AppendLine();
+                int n = 1;
+                foreach (string step in pb.Steps)
+                {
+                    sb.AppendLine($"{n}. {step}");
+                    n++;
+                }
+                sb.AppendLine();
+            }
+
+            if (pb.References.Count > 0)
+            {
+                sb.AppendLine("**References:** "
+                    + string.Join(" · ", pb.References.Select(r => $"[{r.Title}]({r.Url})")));
+                sb.AppendLine();
+            }
         }
     }
 

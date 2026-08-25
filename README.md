@@ -8,19 +8,7 @@ Built for ordinary .NET teams — county IT, libraries, SaaS vendors, defense su
 respond to federal PQC-migration timelines, often **without an in-house cryptographer**.
 
 > **Honesty first.** A clean scan means *"no detectable issues in analyzed source,"* not *"the system is
-> quantum-safe."* See [`docs/KNOWN-GAPS.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/KNOWN-GAPS.md) for exactly what static analysis cannot see.
-
-## The toolkit — three ways to use it
-
-One detection engine, shipped three ways. All run **entirely locally** — no source upload, no telemetry.
-
-| Component | What it's for | Get it |
-|---|---|---|
-| **`dotnet-cbom` CLI** | Full scan of a solution/project/directory → CycloneDX, SARIF, HTML, and summary reports; PQC readiness score; baseline diffing; CI gate. | [NuGet ↗](https://www.nuget.org/packages/PostQuantum.CryptographicBillOfMaterials.Cli) |
-| **Roslyn analyzer** | The same rules as **in-editor squiggles while you type** — in Visual Studio, VS Code, Rider, and on `dotnet build`/CI. | [NuGet ↗](https://www.nuget.org/packages/PostQuantum.CryptographicBillOfMaterials.Analyzer) |
-| **VS Code extension** | A **PQC-readiness dashboard**, crypto-inventory sidebar, and status-bar score; one-click HTML report and CI scaffolding. | [Marketplace ↗](https://marketplace.visualstudio.com/items?itemName=systemslibrarian.postquantum-cbom) |
-
-Start with the CLI for reports and CI; add the analyzer for live feedback in any IDE; add the extension for a visual dashboard in VS Code.
+> quantum-safe."* See [`docs/KNOWN-GAPS.md`](docs/KNOWN-GAPS.md) for exactly what static analysis cannot see.
 
 ## What it does
 
@@ -31,6 +19,10 @@ Start with the CLI for reports and CI; add the analyzer for live feedback in any
   conflated. Every verdict carries a **documented basis** (FIPS/NIST/CWE citation).
 - **Scores** transparently: a 0–100 finding risk and a **PQC Readiness Score** whose arithmetic is shown,
   never a black box.
+- **Tells you how to migrate**, not just what's wrong: every quantum-vulnerable finding links to a **PQC
+  migration playbook** with worked .NET 10 code (`MLKem`/`MLDsa`/`SlhDsa`), the often-no-code-change TLS
+  path, BouncyCastle for older runtimes, hybrid-mode and interop caveats, and ordered steps — written for
+  teams without a cryptographer.
 - **Reports** as **CycloneDX 1.6** (a profiled CBOM, not a proprietary format), **SARIF 2.1.0**,
   Markdown, HTML, and an executive summary — now as **audit packets**: top migration actions,
   what-changed-since-baseline, remediation status, and waivers.
@@ -38,6 +30,9 @@ Start with the CLI for reports and CI; add the analyzer for live feedback in any
   stamping each finding New / Unchanged / Regressed / Waived.
 - **Validates itself**: generated CBOMs are checked against the **official CycloneDX 1.6 JSON Schema**
   (bundled, offline) plus the `dotnet-cbom` profile — in the `validate` command and in CI.
+- **Measures its own accuracy**: a labeled-corpus [accuracy benchmark](benchmark/ACCURACY.md) runs the real
+  detectors against independently-authored ground truth (including false-positive traps and severity
+  discrimination) and fails CI on any regression — precision/recall as evidence, not assertion.
 - **Sees beyond source**: third-party crypto via Bouncy Castle detection and a **package-manifest
   inventory** (`project.assets.json` / `PackageReference`) so crypto in dependencies is visible too.
 
@@ -47,19 +42,13 @@ Start with the CLI for reports and CI; add the analyzer for live feedback in any
 dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli
 ```
 
-(Requires the .NET SDK present for `.sln`/`.csproj` scans; a directory scan works without it.)
+Not yet on nuget.org? Install the signed package attached to any [GitHub Release](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/releases) — verify its checksum against `SHA256SUMS.txt`, then point the installer at the folder you downloaded it into:
 
-## Editor integration
+```bash
+dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli --add-source ./downloads --version <release-version>
+```
 
-The same detection engine ships two ways for working *inside* your editor:
-
-- **Roslyn analyzer** — weak/quantum-vulnerable crypto as squiggles while you type, in Visual Studio, VS Code, Rider, and `dotnet build`/CI:
-  ```bash
-  dotnet add package PostQuantum.CryptographicBillOfMaterials.Analyzer
-  ```
-- **VS Code extension** ([Marketplace](https://marketplace.visualstudio.com/items?itemName=systemslibrarian.postquantum-cbom), source in `extensions/vscode`) — a PQC-readiness dashboard, crypto-inventory sidebar, and status-bar score, driven by this CLI's `--format json-summary` contract. Install: search **"PostQuantum CBOM"** in the Extensions view.
-
-Both run **entirely locally** — no source upload, no telemetry.
+(Requires the .NET SDK present for `.sln`/`.csproj` scans; a single-file or directory scan works without it.)
 
 ## Quick start
 
@@ -122,7 +111,7 @@ Use the official composite action (SARIF upload + artifact retention built in):
 ```
 
 Full copy-paste pipelines for **GitHub Actions** (with a PR baseline-diff comment), **Azure DevOps**, and
-**GitLab CI** are in [`examples/ci/`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/tree/main/examples/ci). Start at `--fail-on critical` and ratchet down as the
+**GitLab CI** are in [`examples/ci/`](examples/ci/). Start at `--fail-on critical` and ratchet down as the
 inventory matures; SARIF lights up code scanning while the CBOM artifact feeds Dependency-Track or an auditor.
 
 ## How risk and readiness are computed (transparent)
@@ -132,7 +121,7 @@ inventory matures; SARIF lights up code scanning while the CBOM artifact feeds D
 - **PQC Readiness** = `100 × safe-weight / total-weight` over quantum-relevant algorithms only; classical
   and config issues are reported separately so they don't distort the PQC picture.
 
-Full methodology and the CycloneDX profile delta are in [`docs/TECHNICAL-DESIGN.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/TECHNICAL-DESIGN.md).
+Full methodology and the CycloneDX profile delta are in [`docs/TECHNICAL-DESIGN.md`](docs/TECHNICAL-DESIGN.md).
 
 ## Standards alignment
 
@@ -140,12 +129,12 @@ Output is a valid **CycloneDX 1.6** BOM (the version that upstreamed CBOM) — p
 official JSON Schema. PQC/risk fields live in the sanctioned `properties`/`evidence` extension points under
 the `cbom:` namespace, so any CycloneDX-aware tool can ingest it. Verdicts cite FIPS 203/204/205, NIST SP
 800-131A/800-52, NIST IR 8547 (⚠ draft), CNSA 2.0, and CWE — see the citation-status table in
-[`docs/RULES.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/RULES.md).
+[`docs/RULES.md`](docs/RULES.md).
 
 Configuration (`cbom.config.json`): rule toggles recorded as **waivers** (justification/approver/expiry),
 **per-algorithm** tuning, severity floors that only raise, path globs, and **data-sensitivity hints** by
 path or namespace (`ns:`) that elevate harvest-now-decrypt-later risk. Everything applied is recorded back
-into the CBOM. See [`samples/cbom.config.example.json`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/samples/cbom.config.example.json).
+into the CBOM. See [`samples/cbom.config.example.json`](samples/cbom.config.example.json).
 
 ## Project layout
 
@@ -161,11 +150,11 @@ examples/ci/  github-actions.yml · azure-pipelines.yml · gitlab-ci.yml
 
 ## Status
 
-Active development. Working today: scan (solution/project/directory), **16 rules**, all report formats as
+Active development. Working today: scan (solution/project/directory), **17 rules**, all report formats as
 audit packets, diff/baseline with remediation status, **policy profiles**, expressive config, **official
 CycloneDX 1.6 schema validation**, a GitHub Action + CI examples, and a tool SBOM. See
-[`docs/ACCURACY-AND-LIMITATIONS.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/ACCURACY-AND-LIMITATIONS.md) and
-[`docs/KNOWN-GAPS.md`](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/KNOWN-GAPS.md) for what static analysis can and cannot see.
+[`docs/ACCURACY-AND-LIMITATIONS.md`](docs/ACCURACY-AND-LIMITATIONS.md) and
+[`docs/KNOWN-GAPS.md`](docs/KNOWN-GAPS.md) for what static analysis can and cannot see.
 
 ## License
 

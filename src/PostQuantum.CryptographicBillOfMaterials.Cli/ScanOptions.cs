@@ -1,3 +1,4 @@
+using System.Reflection;
 using PostQuantum.CryptographicBillOfMaterials.Model;
 
 namespace PostQuantum.CryptographicBillOfMaterials.Cli;
@@ -6,9 +7,27 @@ namespace PostQuantum.CryptographicBillOfMaterials.Cli;
 internal static class ToolInfo
 {
     public const string Name = "dotnet-cbom";
-    public const string Version = "0.1.0";
     public const string ProfileVersion = "1.0";
     public const string CycloneDxSpecVersion = "1.6";
+
+    /// <summary>
+    /// The product version, read at runtime from this assembly's informational version (set from
+    /// <c>&lt;Version&gt;</c> in Directory.Build.props, which CI overrides from the release tag). Read from
+    /// the assembly rather than a hardcoded constant so the reported version always matches the installed
+    /// package. SourceLink appends <c>+&lt;commit&gt;</c> build metadata, which is stripped here.
+    /// </summary>
+    public static string Version { get; } = ReadVersion();
+
+    private static string ReadVersion()
+    {
+        string? informational = typeof(ToolInfo).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (string.IsNullOrEmpty(informational))
+            return "0.0.0";
+
+        int plus = informational.IndexOf('+');
+        return plus >= 0 ? informational[..plus] : informational;
+    }
 }
 
 /// <summary>Parsed options for the <c>scan</c> command.</summary>

@@ -7,7 +7,7 @@ The 10 bars below have been substantially implemented. See [CHANGELOG.md](../CHA
 | Bar | Status | Evidence |
 |---|---|---|
 | 01. Trust mechanically verifiable | ✅ | Official CycloneDX 1.6 schema validation in `validate` + CI; profile validator; golden test |
-| 02. Coverage matrix + high-value gaps | ✅ | 16 rules incl. JWT alg=none/weak-HMAC, X.509, Bouncy Castle, package manifest, KMS depth, AES KeySize, weak-RNG context; [RULES.md](RULES.md) |
+| 02. Coverage matrix + high-value gaps | ✅ | 17 rules incl. JWT alg=none/weak-HMAC, X.509, Bouncy Castle, package manifest, KMS depth, AES KeySize, weak-RNG context; [RULES.md](RULES.md) |
 | 03. Reports as audit packets | ✅ | Top migration actions, what-changed-since-baseline, remediation status, waivers |
 | 04. Policy profiles | ✅ | general/federal/cnsa2/audit/developer; recorded in metadata; raise-only |
 | 05. CI/PR first-class | ✅ | GitHub Action, Azure/GitLab examples, PR baseline-diff comment, `--changed-files`, exit codes |
@@ -20,11 +20,32 @@ The 10 bars below have been substantially implemented. See [CHANGELOG.md](../CHA
 The two ◑ items are limited only by things that need a maintainer secret (signing/publishing) or are an
 inherent static-analysis limit (full dataflow) — see [KNOWN-GAPS.md](KNOWN-GAPS.md).
 
+## Beyond the original ten bars
+
+Three capabilities were added on top of the roadmap to close the gap between "a great repo" and "a tool
+teams install and stake an audit on":
+
+- **PQC migration playbooks** — every Shor-vulnerable finding links to concrete, .NET-specific *how-to-migrate*
+  guidance (worked .NET 10 `MLKem`/`MLDsa`/`SlhDsa` code, the no-code-change TLS path, BouncyCastle for older
+  runtimes, hybrid mode, caveats, steps). This makes the tool a transition system, not just a scanner. See
+  [ADR 0003](adr/0003-pqc-migration-playbooks.md).
+- **Accuracy benchmark** — a labeled corpus measures precision/recall (with false-positive traps and severity
+  discrimination) and fails CI on regression, turning accuracy claims into evidence. See
+  [../benchmark/ACCURACY.md](../benchmark/ACCURACY.md).
+- **Real distribution** — tagging a release publishes a GitHub Release with the `.nupkg`, symbols, tool SBOM,
+  and checksums attached, and the CLI's reported version is the package version. See
+  [RELEASING.md](RELEASING.md).
+
 ## Short verdict
 
-This is already aimed at the right problem. The strongest parts are the honest framing, CycloneDX/SARIF orientation, fail-closed scan behavior, separate classical-vs-quantum risk model, and baseline/diff workflow. For early technical evaluators, I would put the current repo around a strong 7/10.
+This is aimed squarely at the right problem. The strongest parts are the honest framing, CycloneDX/SARIF
+orientation, fail-closed scan behavior, the separate classical-vs-quantum risk model, the baseline/diff
+workflow, the actionable migration playbooks, and a measured-accuracy benchmark.
 
-To become a 10/10 for the people who actually need it, the project should become less like "a promising scanner" and more like "an auditable PQC migration system for .NET teams that do not have a cryptographer on staff." The winning move is not random feature breadth. It is trust evidence, coverage depth, workflow fit, and claim hygiene.
+The remaining distance to a fully turnkey "auditable PQC migration system" is operational, not architectural:
+executing the signed nuget.org publish (needs a maintainer cert/key) and deepening dataflow beyond a single
+method (an inherent static-analysis trade-off). The winning move from here is not feature breadth — it is
+distribution, real-world accuracy data, and claim hygiene.
 
 ## Who the real users are
 

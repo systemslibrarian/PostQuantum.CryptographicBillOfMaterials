@@ -20,7 +20,8 @@ public static class CbomReader
         JsonElement metadata = root.TryGetProperty("metadata", out JsonElement md) ? md : default;
         IReadOnlyDictionary<string, string> metaProps = ReadProperties(metadata);
 
-        string solutionName = metadata.TryGetProperty("component", out JsonElement comp)
+        string solutionName = metadata.ValueKind == JsonValueKind.Object
+            && metadata.TryGetProperty("component", out JsonElement comp)
             && comp.TryGetProperty("name", out JsonElement nm)
                 ? nm.GetString() ?? "solution"
                 : "solution";
@@ -94,6 +95,7 @@ public static class CbomReader
             RiskScore = ParseInt(props.GetValueOrDefault("cbom:risk:score")),
             QuantumVulnerability = ParseQuantum(props.GetValueOrDefault("cbom:quantum:vulnerable")),
             AssetType = ParseAssetType(component),
+            Status = ParseEnum(props.GetValueOrDefault("cbom:remediation:status"), RemediationStatus.Unknown),
             Location = new SourceLocation(file, line),
             BomRef = bomRef,
         };
@@ -134,6 +136,7 @@ public static class CbomReader
     {
         "true" => QuantumVulnerability.Vulnerable,
         "reduced-margin" => QuantumVulnerability.ReducedMargin,
+        "post-quantum" => QuantumVulnerability.PostQuantum,
         _ => QuantumVulnerability.NotVulnerable,
     };
 
@@ -146,7 +149,9 @@ public static class CbomReader
         {
             foreach (JsonElement p in props.EnumerateArray())
             {
-                if (p.TryGetProperty("name", out JsonElement n) && p.TryGetProperty("value", out JsonElement v))
+                if (p.ValueKind == JsonValueKind.Object
+                    && p.TryGetProperty("name", out JsonElement n) && n.ValueKind == JsonValueKind.String
+                    && p.TryGetProperty("value", out JsonElement v) && v.ValueKind == JsonValueKind.String)
                     result[n.GetString() ?? ""] = v.GetString() ?? "";
             }
         }
@@ -161,7 +166,8 @@ public static class CbomReader
 
     private static string? TryFirstTool(JsonElement metadata, string field)
     {
-        if (metadata.TryGetProperty("tools", out JsonElement tools)
+        if (metadata.ValueKind == JsonValueKind.Object
+            && metadata.TryGetProperty("tools", out JsonElement tools)
             && tools.TryGetProperty("components", out JsonElement comps)
             && comps.ValueKind == JsonValueKind.Array
             && comps.GetArrayLength() > 0
@@ -173,7 +179,8 @@ public static class CbomReader
     }
 
     private static DateTimeOffset ReadTimestamp(JsonElement metadata) =>
-        metadata.TryGetProperty("timestamp", out JsonElement ts)
+        metadata.ValueKind == JsonValueKind.Object
+        && metadata.TryGetProperty("timestamp", out JsonElement ts)
         && ts.GetString() is { } s
         && DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTimeOffset v)
             ? v

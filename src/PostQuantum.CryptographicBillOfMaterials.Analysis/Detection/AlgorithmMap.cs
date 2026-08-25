@@ -5,8 +5,15 @@ internal static class AlgorithmMap
 {
     public static string? FromTypeName(string fullName)
     {
+        // Only the real BCL crypto namespace counts. Matching the bare type name alone would mis-flag a
+        // user-defined type that merely shares a BCL crypto name (e.g. Acme.Trading.RSA) — the same
+        // false-positive class fixed in PqcPositiveDetector.
         int dot = fullName.LastIndexOf('.');
-        string simple = dot >= 0 ? fullName.Substring(dot + 1) : fullName;
+        // Substring rather than a range expression: System.Index/System.Range are unavailable in the
+        // netstandard2.0 analyzer that shares this file.
+        if (dot < 0 || !string.Equals(fullName.Substring(0, dot), "System.Security.Cryptography", StringComparison.Ordinal))
+            return null;
+        string simple = fullName.Substring(dot + 1);
 
         return simple switch
         {

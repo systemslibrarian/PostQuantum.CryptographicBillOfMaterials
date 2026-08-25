@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using PostQuantum.CryptographicBillOfMaterials.Analysis.Detection;
 using PostQuantum.CryptographicBillOfMaterials.Model;
 
@@ -110,7 +111,7 @@ internal static class PackageCryptoInventory
             RiskBasis = v.Basis,
             Recommendation = recommendation,
             Location = location,
-            BomRef = BomRef.Create(display, location, RuleId),
+            BomRef = BomRef.Create(display, location.FilePath, RuleId),
         };
     }
 
@@ -137,7 +138,7 @@ internal static class PackageCryptoInventory
             RiskBasis = "Dependency advertises post-quantum algorithm support (positive signal); confirm it is actually wired in.",
             Recommendation = Recommendation.None,
             Location = location,
-            BomRef = BomRef.Create(display, location, RuleId),
+            BomRef = BomRef.Create(display, location.FilePath, RuleId),
         };
     }
 
@@ -162,7 +163,14 @@ internal static class PackageCryptoInventory
         {
             string? assets = FindAssetsFile(projectPathOrDir);
             if (assets is not null)
-                return ReadAssets(assets);
+            {
+                // Use the restored graph when it actually yields packages; otherwise (corrupt/partial restore,
+                // or an unrecognized assets schema with no usable 'libraries') fall through to the manifest so
+                // declared crypto packages aren't silently missed.
+                IReadOnlyList<(string, string)> fromAssets = ReadAssets(assets);
+                if (fromAssets.Count > 0)
+                    return fromAssets;
+            }
 
             string? csproj = File.Exists(projectPathOrDir) && projectPathOrDir.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
                 ? projectPathOrDir
@@ -208,16 +216,49 @@ internal static class PackageCryptoInventory
         return result;
     }
 
+    private const string UnspecifiedVersion = "unspecified";
+
+    /// <summary>
+    /// Read <c>&lt;PackageReference&gt;</c> items from a project, capturing the version whether it is given as
+    /// an attribute (<c>Version="x"</c>) or a child element (<c>&lt;Version&gt;x&lt;/Version&gt;</c>) — both are
+    /// valid MSBuild. Uses an XML parser (namespace-agnostic, so legacy non-SDK csproj also works); falls back
+    /// to a regex only if the file is not well-formed XML.
+    /// </summary>
+    private static IReadOnlyList<(string, string)> ReadPackageReferences(string csprojPath)
+    {
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Load(csprojPath);
+        }
+        catch (System.Xml.XmlException)
+        {
+            return ReadPackageReferencesRegex(File.ReadAllText(csprojPath));
+        }
+
+        var result = new List<(string, string)>();
+        foreach (XElement pr in doc.Descendants().Where(e => e.Name.LocalName == "PackageReference"))
+        {
+            string? id = (string?)pr.Attribute("Include") ?? (string?)pr.Attribute("Update");
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            string? version = (string?)pr.Attribute("Version")
+                ?? pr.Elements().FirstOrDefault(e => e.Name.LocalName == "Version")?.Value.Trim();
+            result.Add((id, string.IsNullOrWhiteSpace(version) ? UnspecifiedVersion : version));
+        }
+        return result;
+    }
+
     private static readonly Regex PackageRefRegex = new(
         "<PackageReference\\s+[^>]*Include\\s*=\\s*\"(?<id>[^\"]+)\"(?:[^>]*Version\\s*=\\s*\"(?<ver>[^\"]+)\")?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static IReadOnlyList<(string, string)> ReadPackageReferences(string csprojPath)
+    private static IReadOnlyList<(string, string)> ReadPackageReferencesRegex(string text)
     {
-        string text = File.ReadAllText(csprojPath);
         var result = new List<(string, string)>();
         foreach (Match m in PackageRefRegex.Matches(text))
-            result.Add((m.Groups["id"].Value, m.Groups["ver"].Success ? m.Groups["ver"].Value : "unspecified"));
+            result.Add((m.Groups["id"].Value, m.Groups["ver"].Success ? m.Groups["ver"].Value : UnspecifiedVersion));
         return result;
     }
 

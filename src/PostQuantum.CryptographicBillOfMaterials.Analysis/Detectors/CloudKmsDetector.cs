@@ -49,8 +49,8 @@ internal sealed class CloudKmsDetector : DetectorBase
         }
 
         ITypeSymbol? type = ResolveInstantiatedType(ctx);
-        if (type is null)
-            return;
+        if (type is null || !InKmsNamespace(type))
+            return; // KMS client/key type names (e.g. "KeyClient") are generic; require the real SDK namespace.
 
         if (AsymmetricKeyOptions.TryGetValue(type.Name, out string? f2))
         {
@@ -60,6 +60,16 @@ internal sealed class CloudKmsDetector : DetectorBase
 
         if (KmsClientTypes.Contains(type.Name))
             ReportClientInventory(ctx, type.Name);
+    }
+
+    // The managed-KMS SDK namespaces. Gating on these prevents a user type that merely shares a name
+    // (e.g. an app's own "KeyClient" or "CryptographyClient") from being mistaken for cloud KMS usage.
+    private static bool InKmsNamespace(ITypeSymbol type)
+    {
+        string ns = type.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+        return ns.StartsWith("Azure.Security.KeyVault", StringComparison.Ordinal)
+            || ns.StartsWith("Amazon.KeyManagementService", StringComparison.Ordinal)
+            || ns.StartsWith("Google.Cloud.Kms", StringComparison.Ordinal);
     }
 
     private void ReportManagedAsymmetricKey(DetectionContext ctx, SyntaxNode node, string family)
