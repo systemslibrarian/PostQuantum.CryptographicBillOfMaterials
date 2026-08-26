@@ -23,6 +23,9 @@ This extension is the **dashboard and inventory** layer. For inline diagnostics 
 dotnet add package PostQuantum.CryptographicBillOfMaterials.Analyzer
 ```
 
+The analyzer needs a Roslyn 4.8+ host: Visual Studio 2022 17.8+, .NET SDK 8.0.1xx+, or a C# Dev Kit build on
+the same compiler. Below that the compiler reports CS9057 and skips it.
+
 ## Requirements
 
 Install the CLI once (the extension calls it):

@@ -145,6 +145,7 @@ into the CBOM. See [`samples/cbom.config.example.json`](samples/cbom.config.exam
 ```
 src/  PostQuantum.CryptographicBillOfMaterials            core model · risk · scoring · knowledge base
       PostQuantum.CryptographicBillOfMaterials.Analysis   Roslyn detectors + scan engine
+      PostQuantum.CryptographicBillOfMaterials.Analyzer   the same detectors as a shipped Roslyn analyzer
       PostQuantum.CryptographicBillOfMaterials.Reporting  CycloneDX / SARIF / Markdown / HTML / diff
       PostQuantum.CryptographicBillOfMaterials.Cli        dotnet-cbom
 docs/  TECHNICAL-DESIGN.md · THREAT-MODEL.md · KNOWN-GAPS.md · RULES.md · ROADMAP.md

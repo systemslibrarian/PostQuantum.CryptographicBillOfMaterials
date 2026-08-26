@@ -175,6 +175,18 @@ internal static class ScanRunner
 
         document = ApplyBaselineStatus(document, options, diagnostics);
 
+        // --output names a DIRECTORY, and a value that looks like a file name almost always means the user
+        // expected a single report file there. Say so rather than silently creating a directory called
+        // "vuln.json" — the mistake leaves a folder in the tree that reads as a corrupted output file.
+        if (Path.GetExtension(options.OutputDir) is { Length: > 0 } ext
+            && !Directory.Exists(options.OutputDir))
+        {
+            diagnostics.Add(
+                $"--output takes a directory, but '{options.OutputDir}' looks like a file name; creating a "
+                + $"directory of that name. Reports are written as cbom{ext.ToLowerInvariant()}-style files "
+                + "inside it — pass a folder to make this explicit.");
+        }
+
         Directory.CreateDirectory(options.OutputDir);
         WriteReports(document, options, diagnostics);
         RunBaselineDiff(document, options, diagnostics);
