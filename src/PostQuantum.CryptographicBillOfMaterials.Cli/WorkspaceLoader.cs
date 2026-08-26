@@ -39,11 +39,14 @@ internal static class WorkspaceLoader
         using MSBuildWorkspace workspace = msbuildProperties is { Count: > 0 }
             ? MSBuildWorkspace.Create(new Dictionary<string, string>(msbuildProperties))
             : MSBuildWorkspace.Create();
-        workspace.WorkspaceFailed += (_, e) =>
+        // RegisterWorkspaceFailedHandler, not the obsolete WorkspaceFailed event: from Roslyn 5.0 the event
+        // is deprecated in favour of a handler that no longer marshals to the UI thread. The returned
+        // registration is disposed with the workspace below.
+        using IDisposable failureHandler = workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
                 diagnostics.Add(e.Diagnostic.Message);
-        };
+        });
 
         var projects = new List<Project>();
         string ext = System.IO.Path.GetExtension(slnOrProjPath).ToLowerInvariant();

@@ -14,5 +14,5 @@ dotnet CycloneDX \
   --exclude-test-projects
 
 # Round-trip: a CBOM tool should be able to validate its own SBOM against the official schema.
-dotnet run --project src/PostQuantum.CryptographicBillOfMaterials.Cli -- validate sbom/tool.cdx.json --schema-only
+dotnet run -f net10.0 --project src/PostQuantum.CryptographicBillOfMaterials.Cli -- validate sbom/tool.cdx.json --schema-only
 echo "Wrote sbom/tool.cdx.json"

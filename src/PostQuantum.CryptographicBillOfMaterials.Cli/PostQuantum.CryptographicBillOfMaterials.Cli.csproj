@@ -2,7 +2,17 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Multi-targeted deliberately: Microsoft.Build.Locator cannot enumerate an SDK whose major version
+         exceeds the running runtime's (the SDK's Microsoft.Build.dll targets that major), so a net8.0-only
+         tool finds ZERO MSBuild instances on an SDK-10-only machine and every .sln/.csproj scan silently
+         degrades to a reference-free syntax scan. Upgrading the Locator does not help (verified on 1.9.1).
+         `dotnet tool install` picks the asset matching the user's runtime. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <!-- net10.0 turns on .NET 10's default TRANSITIVE NuGet audit, which fails CI's -warnaserror on the
+         transitive Microsoft.Build.Tasks.Core 17.7.2 (NU1903). `direct` is the audit posture this project
+         already had on net8.0. Do NOT pin Microsoft.Build.Tasks.Core to 17.14.8 to silence it — that adds
+         GHSA-w3q9-fxm7-j8fq and eight further advisories. -->
+    <NuGetAuditMode>direct</NuGetAuditMode>
     <RootNamespace>PostQuantum.CryptographicBillOfMaterials.Cli</RootNamespace>
     <AssemblyName>dotnet-cbom</AssemblyName>
     <PackageId>PostQuantum.CryptographicBillOfMaterials.Cli</PackageId>
@@ -32,7 +42,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Build.Locator" Version="1.7.8" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.11.0" />
+    <!-- 5.0.0, not 4.x: Roslyn 4.x cannot open .slnx ("No file format header found"), and WorkspaceLoader
+         routes .slnx to OpenSolutionAsync. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.0.0" />
+    <!-- Without CSharp.Workspaces, MSBuildWorkspace's MEF host has no C# language service and every project
+         open throws "Cannot open project ... because the language 'C#' is not supported" — even once the
+         Locator registers successfully. This is the SDK-independent half of the failure. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
