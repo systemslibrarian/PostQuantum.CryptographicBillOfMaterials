@@ -82,6 +82,34 @@ internal static class GlobMatcher
 }
 
 /// <summary>
+/// Matches a dot-separated namespace against a hint pattern. A trailing <c>.*</c> or <c>.**</c> means "this
+/// namespace OR anything beneath it" — the same prefix-plus-optional-descendants semantic <see cref="GlobMatcher"/>
+/// already gives paths via <c>**/</c>. Glob translation alone cannot express it: <c>Contoso.Billing.*</c>
+/// becomes <c>^Contoso\.Billing\.[^/]*$</c>, which misses <c>Contoso.Billing</c> itself, and the obvious
+/// workarounds are worse (<c>.**</c> misses it too; <c>Contoso.Billing*</c> also matches
+/// <c>Contoso.BillingOther</c>). Anything else falls back to glob matching, where '.' is an ordinary character.
+/// </summary>
+internal static class NamespaceMatcher
+{
+    public static bool IsMatch(string ns, string pattern)
+    {
+        foreach (string suffix in new[] { ".**", ".*" })
+        {
+            if (!pattern.EndsWith(suffix, StringComparison.Ordinal))
+                continue;
+
+            string prefix = pattern[..^suffix.Length];
+            // Only the simple 'Prefix.*' form gets tree semantics; an inner wildcard keeps glob behaviour so
+            // existing patterns are unaffected.
+            if (prefix.Length > 0 && prefix.IndexOfAny(new[] { '*', '?' }) < 0)
+                return Regex.IsMatch(ns, "^" + Regex.Escape(prefix) + @"(\..*)?$", RegexOptions.IgnoreCase);
+            break;
+        }
+        return GlobMatcher.IsMatch(ns, pattern);
+    }
+}
+
+/// <summary>
 /// A config that exists but cannot be parsed/validated. This is fatal by design: silently reverting to
 /// defaults could drop a severity floor or waiver an auditor relied on (fail-closed, TDD §0 misuse-resistance).
 /// </summary>
@@ -316,7 +344,7 @@ internal static class ConfigApplication
                 continue;
 
             bool match = key.StartsWith("ns:", StringComparison.OrdinalIgnoreCase)
-                ? f.Location.Namespace is { } ns && GlobMatcher.IsMatch(ns, key[3..])
+                ? f.Location.Namespace is { } ns && NamespaceMatcher.IsMatch(ns, key[3..])
                 : GlobMatcher.IsMatch(f.Location.FilePath, key);
             if (match)
                 return true;

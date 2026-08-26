@@ -59,7 +59,12 @@ internal static class PackageCryptoInventory
         if (packages.Count == 0)
             return Array.Empty<CryptoFinding>();
 
-        string relManifest = ToRelative(projectPathOrDir, baseDirectory);
+        // Anchor to an actual FILE. projectPathOrDir is the scanned DIRECTORY for every loose/degraded scan,
+        // and ScanRunner passes that same directory as baseDirectory, so relativizing it yields "." — not a
+        // location any SARIF or CycloneDX consumer can resolve, and a bom-ref that differs from the one the
+        // MSBuild-success path produces for the same project.
+        string? manifest = FindManifestFile(projectPathOrDir);
+        string relManifest = ToRelative(manifest ?? projectPathOrDir, baseDirectory);
 
         var findings = new List<CryptoFinding>();
         foreach ((string id, string version) in packages)
@@ -185,6 +190,32 @@ internal static class PackageCryptoInventory
             diagnostics.Add($"package inventory: {ex.Message}");
         }
         return Array.Empty<(string, string)>();
+    }
+
+    /// <summary>
+    /// The file an inventory finding should point at. Prefer the project file — it is the committed artifact
+    /// a code-scanning UI can resolve, whereas obj/ is gitignored — falling back to the restored assets file.
+    /// Never the containing directory: Path.GetRelativePath(dir, dir) is ".".
+    /// </summary>
+    private static string? FindManifestFile(string projectPathOrDir)
+    {
+        if (File.Exists(projectPathOrDir))
+            return projectPathOrDir;
+        if (!Directory.Exists(projectPathOrDir))
+            return null;
+
+        string? proj = Directory
+            .EnumerateFiles(projectPathOrDir, "*.*", SearchOption.TopDirectoryOnly)
+            .Where(p => p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+                     || p.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase)
+                     || p.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p, StringComparer.Ordinal)   // deterministic when a folder holds several
+            .FirstOrDefault();
+        if (proj is not null)
+            return proj;
+
+        string assets = Path.Combine(projectPathOrDir, "obj", "project.assets.json");
+        return File.Exists(assets) ? assets : null;
     }
 
     private static string? FindAssetsFile(string projectPathOrDir)

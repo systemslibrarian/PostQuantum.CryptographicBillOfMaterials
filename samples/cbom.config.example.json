@@ -29,6 +29,9 @@
 
   // Data sensitivity: long-lived confidentiality protected by quantum-vulnerable crypto is the top
   // harvest-now-decrypt-later priority. Match by path glob, or by namespace with an 'ns:' key.
+  // An 'ns:' key ending in '.*' (or '.**') covers the namespace itself AND everything under it, so
+  // 'ns:Contoso.Billing.*' matches Contoso.Billing and Contoso.Billing.Vault.Keys alike — but not a
+  // sibling that merely shares the text, such as Contoso.BillingOther. Drop the suffix for an exact match.
   "dataSensitivityHints": {
     "src/Payments/**": { "dataLifetimeYears": 25, "dataClass": "financial" },
     "ns:Contoso.Billing.*": { "dataLifetimeYears": 30, "dataClass": "regulated" }

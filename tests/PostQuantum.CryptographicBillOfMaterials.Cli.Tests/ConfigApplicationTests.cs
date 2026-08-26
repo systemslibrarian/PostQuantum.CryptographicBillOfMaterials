@@ -167,4 +167,37 @@ public class ConfigApplicationTests
 
         Assert.Equal(RiskLevel.Critical, result.Findings[0].RiskLevel);
     }
+
+    [Fact]
+    public void DataSensitivity_NamespaceHint_CoversTheNamespaceItNames()
+    {
+        // The hint key here is the one shipped verbatim in samples/cbom.config.example.json. Glob
+        // translation made it `^Contoso\.Billing\.[^/]*$`, which matched everything BENEATH the namespace
+        // but not code sitting directly in it — a silent fail-open on the long-lived-data uplift.
+        var config = new CbomConfig
+        {
+            DataSensitivityHints = new() { ["ns:Contoso.Billing.*"] = new DataSensitivityHint { DataLifetimeYears = 30 } },
+        };
+        var f = Finding("CBOM0002", "RSA", RiskLevel.High, QuantumVulnerability.Vulnerable,
+            UsageContext.KeyExchange, ns: "Contoso.Billing");
+        var result = Apply(new[] { f }, config, "general");
+
+        Assert.Equal(RiskLevel.Critical, result.Findings[0].RiskLevel);
+        Assert.Equal(1, result.Summary.ElevatedByDataSensitivity);
+    }
+
+    [Fact]
+    public void DataSensitivity_NamespaceHint_DoesNotLeakToASiblingNamespace()
+    {
+        var config = new CbomConfig
+        {
+            DataSensitivityHints = new() { ["ns:Contoso.Billing.*"] = new DataSensitivityHint { DataLifetimeYears = 30 } },
+        };
+        var f = Finding("CBOM0002", "RSA", RiskLevel.High, QuantumVulnerability.Vulnerable,
+            UsageContext.KeyExchange, ns: "Contoso.BillingOther");
+        var result = Apply(new[] { f }, config, "general");
+
+        Assert.Equal(RiskLevel.High, result.Findings[0].RiskLevel);
+        Assert.Equal(0, result.Summary.ElevatedByDataSensitivity);
+    }
 }

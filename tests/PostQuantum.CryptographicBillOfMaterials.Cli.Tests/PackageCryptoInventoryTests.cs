@@ -30,6 +30,11 @@ public class PackageCryptoInventoryTests
             Assert.Contains("NSec.Cryptography", f.AlgorithmName);
             Assert.Contains("23.0.0", f.AlgorithmName);
             Assert.DoesNotContain("unspecified", f.AlgorithmName);
+
+            // This call shape — project directory as both target and base — is the one every loose or
+            // degraded scan takes, and it used to relativize the directory against itself and anchor the
+            // finding at ".", which no SARIF or CycloneDX consumer can resolve to a file.
+            Assert.Equal("Repro.csproj", f.Location.FilePath);
         }
         finally
         {
