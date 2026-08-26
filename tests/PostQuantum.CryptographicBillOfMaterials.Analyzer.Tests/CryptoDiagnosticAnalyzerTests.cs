@@ -142,3 +142,36 @@ public class CryptoDiagnosticAnalyzerTests
         Assert.Empty(warnings);
     }
 }
+
+/// <summary>
+/// Guards the analyzer's Roslyn floor. Roslyn emits CS9057 and SKIPS any analyzer whose
+/// Microsoft.CodeAnalysis assembly reference is newer than the running compiler, so a pinned-too-high
+/// reference silently disables every CBOM rule on older-but-supported hosts rather than failing loudly.
+/// A 4.11 pin cost .NET SDK 8.0.1xx-3xx and VS 2022 17.8-17.10.
+///
+/// This asserts the assembly reference itself — the exact value the compiler compares — because a build
+/// against a floor compiler cannot be staged reliably: Microsoft.Net.Compilers.Toolset does not displace
+/// the SDK's own csc for this kind of probe, so that test would pass no matter what the pin said.
+/// </summary>
+public class AnalyzerRoslynFloorTests
+{
+    /// <summary>Keep in sync with the analyzer csproj, its README, and docs/COMPATIBILITY.md.</summary>
+    private static readonly Version DocumentedFloor = new(4, 8, 0, 0);
+
+    [Fact]
+    public void AnalyzerAssembly_DoesNotReferenceARoslynNewerThanTheDocumentedFloor()
+    {
+        var referenced = typeof(CryptoDiagnosticAnalyzer).Assembly
+            .GetReferencedAssemblies()
+            .Where(a => a.Name is not null && a.Name.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.NotEmpty(referenced);
+        foreach (System.Reflection.AssemblyName reference in referenced)
+            Assert.True(
+                reference.Version <= DocumentedFloor,
+                $"{reference.Name} {reference.Version} exceeds the documented Roslyn floor {DocumentedFloor}. "
+                + "Hosts on the floor would report CS9057 and skip the analyzer entirely, disabling every "
+                + "CBOM rule. Either lower the reference or raise the floor everywhere it is documented.");
+    }
+}

@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Without this block the repo default (read) applies, and the SARIF upload below 403s on every run while
+# continue-on-error reports the step and the job as green.
+permissions:
+  contents: read           # actions/checkout
+  security-events: write   # github/codeql-action/upload-sarif
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -41,6 +47,17 @@ jobs:
         run: dotnet run -c Release --no-build -f net10.0 --project src/PostQuantum.CryptographicBillOfMaterials.Cli --
              validate cbom-out/cbom.cbom.json
 
+      # Dogfood the MSBuild loader itself. The self-scan above targets a bare DIRECTORY, which never enters
+      # WorkspaceLoader — precisely why the loader shipped broken. --fail-on none so the only failure mode is
+      # a degraded or failed load (exit 2), not this repo's deliberate test fixtures.
+      - name: Dogfood MSBuild loader (must not degrade)
+        run: |
+          dotnet run -c Release --no-build -f net10.0 --project src/PostQuantum.CryptographicBillOfMaterials.Cli -- \
+            scan CryptographicBillOfMaterials.slnx --format summary --output cbom-slnx --fail-on none
+          dotnet run -c Release --no-build -f net10.0 --project src/PostQuantum.CryptographicBillOfMaterials.Cli -- \
+            scan src/PostQuantum.CryptographicBillOfMaterials.Analysis/PostQuantum.CryptographicBillOfMaterials.Analysis.csproj \
+            --format summary --output cbom-proj --fail-on none
+
       - name: Upload CBOM artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -50,8 +67,10 @@ jobs:
           retention-days: 30
 
       - name: Upload SARIF to code scanning
-        if: always()
+        # Fork PRs get a read-only GITHUB_TOKEN whatever `permissions:` declares, so skip the upload there
+        # rather than fail the job. The fork guard is ANDed with always(): replacing always() would skip the
+        # upload whenever an earlier step failed, which is exactly when the findings matter most.
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: cbom-out/cbom.sarif
-        continue-on-error: true
