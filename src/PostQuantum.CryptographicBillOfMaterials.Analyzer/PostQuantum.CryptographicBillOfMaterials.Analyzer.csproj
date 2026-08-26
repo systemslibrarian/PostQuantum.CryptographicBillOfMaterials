@@ -13,6 +13,11 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <DevelopmentDependency>true</DevelopmentDependency>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- RS2008 (analyzer release tracking) cannot apply here: every CBOM rule id but one is generated at
+         runtime from the detector registry (BuildDescriptors below), so a static AnalyzerReleases.*.md
+         would be a second, silently-drifting source of truth for the rule set. docs/RULE-CHANGELOG.md is
+         the tracked one. Only the literal CBOM9999 descriptor trips the rule. -->
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
 
     <!-- Reuse the detector engine via shared-source compile (below); the knowledge base is loaded through
          the System.Text.Json-free MiniJson path so nothing but the compiler libs enters the load context. -->
@@ -22,7 +27,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" PrivateAssets="all" />
+    <!-- An analyzer must reference the LOWEST Roslyn it supports. Roslyn emits CS9057 and SKIPS any analyzer
+         whose Microsoft.CodeAnalysis AssemblyRef is newer than the running compiler, so a 4.11 pin silently
+         disabled every CBOM rule on .NET SDK 8.0.1xx/2xx/3xx and VS 2022 17.8-17.10 — and hard-failed those
+         builds under TreatWarningsAsErrors. Nothing in this project needs an API above 4.8. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Ship as an analyzer: the assembly goes under analyzers/dotnet/cs (not lib/), and the package README

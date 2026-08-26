@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -34,19 +35,48 @@ public sealed class CryptoDiagnosticAnalyzer : DiagnosticAnalyzer
     private static readonly ImmutableDictionary<SyntaxKind, ImmutableArray<ICryptoDetector>> DetectorsByKind =
         BuildDispatchTable();
 
+    /// <summary>
+    /// Reported when a detector throws. A rule that vanished is "unknown, not clean" — the same posture the
+    /// CLI already takes, where ScanEngine records a ScanDiagnostic for the identical failure. Warning, not
+    /// Informational: Info does not surface at default `dotnet build` verbosity, which is exactly the blind
+    /// spot this closes.
+    /// </summary>
+    private static readonly DiagnosticDescriptor RuleFailure = new(
+        id: "CBOM9999",
+        title: "CBOM rule failed to run",
+        messageFormat: "Rule {0} did not run on this file: it failed with {1} ({2}), so its results are unknown rather than clean",
+        category: "Cryptography.Diagnostics",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A detector threw; findings for that rule are missing from this compilation.",
+        helpLinkUri: HelpRoot);
+
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        DescriptorsById.Values.ToImmutableArray();
+        DescriptorsById.Values.Concat(new[] { RuleFailure }).ToImmutableArray();
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
     {
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        // Generated code is IN scope, deliberately: crypto genuinely lives in generated sources (gRPC/WCF/
+        // OpenAPI clients configuring SslProtocols, EF migrations, source-generated config), and the CLI's
+        // ScanEngine walks every tree. Skipping it here made the editor disagree with the CBOM. Both flags
+        // are required — Analyze alone runs the detectors but swallows their diagnostics. Noise is silenced
+        // per-glob in .editorconfig, e.g. [*.g.cs] dotnet_diagnostic.CBOM0002.severity = none.
+        context.ConfigureGeneratedCodeAnalysis(
+            GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeNode, DetectorsByKind.Keys.ToArray());
+
+        // CompilationStart so the "already reported" set is per-compilation state rather than static mutable
+        // state shared across the concurrent compilations EnableConcurrentExecution permits.
+        context.RegisterCompilationStartAction(start =>
+        {
+            var reportedFailures = new ConcurrentDictionary<string, byte>();
+            start.RegisterSyntaxNodeAction(ctx => AnalyzeNode(ctx, reportedFailures), DetectorsByKind.Keys.ToArray());
+        });
     }
 
-    private static void AnalyzeNode(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeNode(SyntaxNodeAnalysisContext context, ConcurrentDictionary<string, byte> reportedFailures)
     {
         if (!DetectorsByKind.TryGetValue(context.Node.Kind(), out ImmutableArray<ICryptoDetector> detectors))
             return;
@@ -63,9 +93,16 @@ public sealed class CryptoDiagnosticAnalyzer : DiagnosticAnalyzer
             {
                 detector.Inspect(detection);
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Isolate a misbehaving detector: a single broken rule must never break the IDE for the rest.
+                // Isolate a misbehaving detector — but never silently. A rule that vanished is "unknown, not
+                // clean", and in the IDE the absence of a squiggle IS the user's clean signal. Once per rule
+                // per compilation: reporting per node would be thousands of identical warnings on a real
+                // solution. OperationCanceledException must propagate — Roslyn relies on it for cancellation.
+                if (reportedFailures.TryAdd(detector.Metadata.RuleId, 0))
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        RuleFailure, context.Node.GetLocation(),
+                        detector.Metadata.RuleId, ex.GetType().Name, ex.Message));
             }
         }
     }

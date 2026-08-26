@@ -13,9 +13,9 @@ namespace PostQuantum.CryptographicBillOfMaterials.Analyzer.Tests;
 /// </summary>
 internal static class AnalyzerHarness
 {
-    public static async Task<ImmutableArray<Diagnostic>> RunAsync(string source)
+    public static async Task<ImmutableArray<Diagnostic>> RunAsync(string source, string path = "Test.cs")
     {
-        SyntaxTree tree = CSharpSyntaxTree.ParseText(source, path: "Test.cs");
+        SyntaxTree tree = CSharpSyntaxTree.ParseText(source, path: path);
         var compilation = CSharpCompilation.Create(
             assemblyName: "AnalyzerTestAssembly",
             syntaxTrees: new[] { tree },
@@ -28,6 +28,13 @@ internal static class AnalyzerHarness
             ImmutableArray.Create<DiagnosticAnalyzer>(new CryptoDiagnosticAnalyzer()));
 
         ImmutableArray<Diagnostic> all = await withAnalyzers.GetAnalyzerDiagnosticsAsync();
+
+        // AD0001 means the analyzer itself threw. The CBOM filter below would silently discard it, so a
+        // crash would otherwise sail through CI as "no findings".
+        Diagnostic? crash = all.FirstOrDefault(d => d.Id == "AD0001");
+        if (crash is not null)
+            throw new Xunit.Sdk.XunitException("Analyzer crashed (AD0001): " + crash.GetMessage());
+
         return all.Where(d => d.Id.StartsWith("CBOM", StringComparison.Ordinal)).ToImmutableArray();
     }
 
