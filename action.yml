@@ -37,6 +37,13 @@ inputs:
     description: "Version of the PostQuantum.CryptographicBillOfMaterials.Cli global tool to install."
     required: false
     default: "latest"
+  allow-partial:
+    description: >-
+      Do not fail on exit 2 when the analysis is partial. Scanning a directory (the default target ".")
+      that contains a .csproj/.sln resolves no NuGet or project references, so it reports as partial —
+      point `target` at the solution/project file for a complete scan, or set this to "true" to accept it.
+    required: false
+    default: "false"
   upload-sarif:
     description: "Upload the generated SARIF to GitHub code scanning."
     required: false
@@ -69,6 +76,7 @@ runs:
           --output "${{ inputs.output }}" --profile "${{ inputs.profile }}" --fail-on "${{ inputs.fail-on }}")
         [ -n "${{ inputs.baseline }}" ] && args+=(--baseline "${{ inputs.baseline }}")
         [ -n "${{ inputs.config }}" ] && args+=(--config "${{ inputs.config }}")
+        [ "${{ inputs.allow-partial }}" = "true" ] && args+=(--allow-partial)
         set +e
         dotnet-cbom "${args[@]}"
         code=$?

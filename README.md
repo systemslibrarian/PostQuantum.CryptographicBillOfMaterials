@@ -42,7 +42,7 @@ respond to federal PQC-migration timelines, often **without an in-house cryptogr
 dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli
 ```
 
-Not yet on nuget.org? Install the signed package attached to any [GitHub Release](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/releases) — verify its checksum against `SHA256SUMS.txt`, then point the installer at the folder you downloaded it into:
+Not yet on nuget.org? From v1.2.0 onward every tag also publishes a [GitHub Release](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/releases) with the signed package attached — verify its checksum against `SHA256SUMS.txt`, then point the installer at the folder you downloaded it into:
 
 ```bash
 dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli --add-source ./downloads --version <release-version>
@@ -56,11 +56,15 @@ dotnet tool install -g PostQuantum.CryptographicBillOfMaterials.Cli --add-source
 # Scan a solution, project, directory, or single file
 dotnet-cbom scan ./MyApp.sln
 
+# Scanning a DIRECTORY that contains a .csproj/.sln resolves no references, so it is reported as a
+# partial analysis (exit 2). Scan the project/solution file itself, or accept the gap explicitly:
+dotnet-cbom scan ./src --allow-partial
+
 # Choose formats, a policy posture, and a CI gate
-dotnet-cbom scan ./src --format cyclonedx,sarif,html --profile cnsa2 --fail-on critical
+dotnet-cbom scan ./MyApp.sln --format cyclonedx,sarif,html --profile cnsa2 --fail-on critical
 
 # Show migration progress against a previous run (stamps New/Regressed/Unchanged on findings)
-dotnet-cbom scan ./src --baseline ./last.cbom.json
+dotnet-cbom scan ./MyApp.sln --baseline ./last.cbom.json
 dotnet-cbom diff ./last.cbom.json ./cbom-out/cbom.cbom.json
 
 # Verify a CBOM against the official CycloneDX 1.6 schema AND the dotnet-cbom profile

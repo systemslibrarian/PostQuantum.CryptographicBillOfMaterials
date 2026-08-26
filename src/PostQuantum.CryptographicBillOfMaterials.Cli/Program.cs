@@ -317,7 +317,9 @@ internal static class Program
 
             EXAMPLES
               dotnet-cbom scan .\MyApp.sln
-              dotnet-cbom scan .\src --format cyclonedx,sarif --fail-on critical
+              dotnet-cbom scan .\MyApp.sln --format cyclonedx,sarif --fail-on critical
+              dotnet-cbom scan .\src --allow-partial    (a directory holding a .csproj resolves no
+                                                        references, so it is a partial analysis)
             """);
     }
 }

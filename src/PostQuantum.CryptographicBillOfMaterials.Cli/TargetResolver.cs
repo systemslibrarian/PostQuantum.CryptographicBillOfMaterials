@@ -52,7 +52,32 @@ internal static class TargetResolver
         }
 
         if (Directory.Exists(target))
-            return LooseDirectory(target, new DirectoryInfo(target).Name);
+        {
+            // A directory holding project/solution files is a project the user expects to be analyzed WITH
+            // its references; LooseDirectory resolves only the running framework's assemblies, so NuGet and
+            // project references stay unresolved. That is the same incomplete analysis already flagged at
+            // the .csproj fallback above — flag it here too rather than presenting it as a clean, complete
+            // result. Without this, `scan .` on a real project reported "PQC Readiness 100 (no
+            // quantum-relevant crypto)" and exited 0 over code full of Shor-vulnerable crypto.
+            var projectFiles = Directory
+                .EnumerateFiles(target, "*.*", SearchOption.AllDirectories)
+                .Where(p => p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+                         || p.EndsWith(".sln", StringComparison.OrdinalIgnoreCase)
+                         || p.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
+                .Where(p => !HasSegment(p, "bin") && !HasSegment(p, "obj") && !HasSegment(p, ".git"))
+                .ToList();
+
+            string dirName = new DirectoryInfo(target).Name;
+            if (projectFiles.Count == 0)
+                return LooseDirectory(target, dirName);   // genuine loose-source scan: stays non-degraded
+
+            diagnostics.Add(
+                $"directory scan: {projectFiles.Count} project/solution file(s) under '{target}' were NOT loaded "
+                + "via MSBuild (NuGet and project references unresolved; third-party crypto such as Bouncy Castle, "
+                + $"JWT and cloud KMS may be missed). Scan '{Path.GetFileName(projectFiles[0])}' directly, or pass "
+                + "--allow-partial to accept a partial analysis.");
+            return LooseDirectory(target, dirName, degraded: true);
+        }
 
         throw new FileNotFoundException($"Scan target not found: {target}");
     }
