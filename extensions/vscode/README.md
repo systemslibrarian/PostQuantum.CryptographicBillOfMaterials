@@ -55,4 +55,4 @@ If `dotnet-cbom` isn't on your PATH, set **`cbom.cliPath`** in settings.
 
 A clean scan means *“no detectable issues in analyzed source,”* not *“the system is quantum-safe.”* Static analysis cannot see runtime- or config-driven crypto. See the [project docs](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/ACCURACY-AND-LIMITATIONS.md).
 
-Apache-2.0 · [Source & issues](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials)
+MIT · [Source & issues](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials)

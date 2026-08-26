@@ -163,4 +163,4 @@ CycloneDX 1.6 schema validation**, a GitHub Action + CI examples, and a tool SBO
 
 ## License
 
-Apache-2.0.
+MIT.

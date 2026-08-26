@@ -4,7 +4,7 @@
   "description": "Cryptographic inventory and PQC readiness for .NET — find RSA, ECC, weak crypto, and quantum-migration risk inside VS Code.",
   "version": "0.1.0",
   "publisher": "systemslibrarian",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.85.0"

@@ -31,4 +31,4 @@ same compiler. Below that the compiler reports CS9057 and skips the analyzer ent
 
 For full-solution inventory, CycloneDX/SARIF reports, PQC-readiness scoring, baselines, and policy profiles, use the [`dotnet-cbom` CLI](https://www.nuget.org/packages/PostQuantum.CryptographicBillOfMaterials.Cli). Rule reference: [docs/RULES.md](https://github.com/systemslibrarian/PostQuantum.CryptographicBillOfMaterials/blob/main/docs/RULES.md).
 
-Apache-2.0.
+MIT.
