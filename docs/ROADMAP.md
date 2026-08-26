@@ -57,6 +57,10 @@ distribution, real-world accuracy data, and claim hygiene.
 
 ## Evidence snapshot from this repo
 
+> Historical, as of 2026-06-28. Line references point at the tree as it stood then and are not maintained.
+> Paths under `cbom-out/` are generated output — `.gitignore` excludes them, so no clone contains them;
+> reproduce with `dotnet-cbom scan ./samples/VulnerableDemo --format markdown --output cbom-out`.
+
 01. The README has a strong user promise: inventory crypto, classify quantum risk, demonstrate PQC migration progress, and emit auditor-friendly formats. See `README.md:1`, `README.md:8`, `README.md:14`, and `README.md:22`.
 
 02. The CLI already has useful adoption primitives: `scan`, `diff`, `version`, selectable formats, baselines, config, quiet mode, and CI exit codes. See `src/PostQuantum.CryptographicBillOfMaterials.Cli/Program.cs:25`, `src/PostQuantum.CryptographicBillOfMaterials.Cli/Program.cs:30`, and `src/PostQuantum.CryptographicBillOfMaterials.Cli/Program.cs:196`.

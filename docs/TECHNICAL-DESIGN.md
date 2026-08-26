@@ -167,7 +167,7 @@ To stay schema-valid, every PQC/risk concept the base schema lacks is expressed 
 
 ### 3.4 What we OVERRIDE / constrain
 
-We override **nothing** in the base schema (overriding would break interop). We **constrain** it via the profile spec (`docs/schema/cbom-profile-1.0.md`): e.g., "a `dotnet-cbom` CBOM MUST set `metadata.component.type=application`; every `cryptographic-asset` MUST carry `evidence.occurrences` OR a `cbom:detection:method=config` property; every finding MUST carry `cbom:risk:level` and `cbom:detection:confidence`." A profile validator (ships in Reporting) enforces these on read/write.
+We override **nothing** in the base schema (overriding would break interop). We **constrain** it via the profile spec (implemented as the profile validator in the Reporting project; there is no separate spec document): e.g., "a `dotnet-cbom` CBOM MUST set `metadata.component.type=application`; every `cryptographic-asset` MUST carry `evidence.occurrences` OR a `cbom:detection:method=config` property; every finding MUST carry `cbom:risk:level` and `cbom:detection:confidence`." A profile validator (ships in Reporting) enforces these on read/write.
 
 ### 3.5 Versioning
 
@@ -260,7 +260,7 @@ Each detector matches on **fully-qualified symbols** via the semantic model (res
 | 10 | **Hardcoded keys / secrets** | byte[]/string literals flowing into key/IV/password params; base64 constants | hardcoded symmetric keys, IVs, JWT signing keys (*CWE-321/798*) — constant-flow analysis |
 | 11 | **PQC usage (positive)** | `PostQuantum.*` packages, ML-KEM/ML-DSA/SLH-DSA APIs, OQS bindings, hybrid constructions | recorded as positive signals that *raise* the readiness score |
 
-Each rule gets a one-page doc in `docs/rules/CBOMxxxx.md`: trigger, **basis with citation**, example code, confidence rationale, and remediation options.
+Per-rule detail — trigger, **basis with citation**, example, confidence rationale and remediation options — lives in the coverage matrix in [RULES.md](RULES.md) and the knowledge base (`Knowledge/algorithms.json`, `Knowledge/playbooks.json`), not in one file per rule.
 
 ### 4.4 Detection confidence (never dropped, always shown)
 
@@ -393,7 +393,7 @@ These pull against each other. Resolution:
 
 ## 6. CLI command design
 
-`dotnet-cbom` (built on `System.CommandLine`). Non-interactive by default; every command supports `--output`, `--format`, `--quiet`, `--verbosity`. Configuration layering: CLI args > `cbom.config.json` (nearest to target) > built-in defaults.
+`dotnet-cbom` uses a hand-rolled argument parser (no `System.CommandLine` dependency — the tool's dependency closure is deliberately small). Non-interactive by default. `scan` supports `--output`, `--format` and `--quiet`; `diff` and `validate` take `--output` only. There is no `--verbosity` flag. Configuration layering: CLI args > `cbom.config.json` (nearest to target) > built-in defaults.
 
 ### 6.1 Command surface
 
@@ -480,7 +480,7 @@ Exit code: 1  (findings ≥ High)
 ### 6.5 Example `diff` run
 
 ```
-$ dotnet-cbom diff baseline.cbom.json current.cbom.json --format markdown -o diff.md
+$ dotnet-cbom diff baseline.cbom.json current.cbom.json -o diff.md
 
 CBOM diff  baseline(2026-03-01) → current(2026-06-28)
 
