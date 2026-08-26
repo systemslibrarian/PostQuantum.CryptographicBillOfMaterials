@@ -77,6 +77,52 @@ public class ScanEngineTests
     }
 
     [Fact]
+    public void Deduplicate_KeepsEveryCallSite_OfTheSameAlgorithmInOneFile()
+    {
+        // Regression guard for a dedup key that used the bom-ref. Bom-refs deliberately exclude the line
+        // (so baselines survive unrelated edits) and are all occurrence 0 at detection time, so keying on
+        // them collapsed every repeat call site in a file down to the first one. The CBOM then reported 1
+        // of N sites while the analyzer squiggled all N.
+        const string repeated = """
+            using System.Security.Cryptography;
+            public class Repeat
+            {
+                public byte[] A(byte[] d) => MD5.HashData(d);
+                public byte[] B(byte[] d) => MD5.HashData(d);
+                public byte[] C(byte[] d) => MD5.HashData(d);
+            }
+            """;
+
+        var md5 = Scan(repeated).Where(f => f.RuleId == "CBOM0010").ToList();
+
+        Assert.Equal(3, md5.Count);
+        Assert.Equal(new[] { 4, 5, 6 }, md5.Select(f => f.Location.Line).OrderBy(l => l).ToArray());
+    }
+
+    [Fact]
+    public void Scan_ThenRelativize_AssignsDistinctBomRefs()
+    {
+        // The occurrence ordinal that makes repeat call sites unique is assigned by Relativize, not at
+        // detection time — so it is only reachable once Deduplicate stops discarding them.
+        const string repeated = """
+            using System.Security.Cryptography;
+            public class Repeat
+            {
+                public byte[] A(byte[] d) => MD5.HashData(d);
+                public byte[] B(byte[] d) => MD5.HashData(d);
+                public byte[] C(byte[] d) => MD5.HashData(d);
+            }
+            """;
+
+        var md5 = FindingPostProcessor.Relativize(Scan(repeated), string.Empty)
+            .Where(f => f.RuleId == "CBOM0010")
+            .ToList();
+
+        Assert.Equal(3, md5.Count);
+        Assert.Equal(3, md5.Select(f => f.BomRef).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
     public void CleanCryptoCode_ProducesNoHighRiskFindings()
     {
         const string clean = """

@@ -102,14 +102,22 @@ public sealed class ScanEngine
     public IReadOnlyList<CryptoFinding> AnalyzeCompilation(Compilation compilation) =>
         Analyze(compilation).Findings;
 
+    /// <summary>
+    /// Collapse detections that land on the exact same site (same rule, file, line, column, algorithm) —
+    /// e.g. two detectors resolving the same node. The key is POSITIONAL, never the bom-ref: bom-refs are
+    /// line-independent by design (BomRef.Create excludes the line so baselines survive unrelated edits)
+    /// and carry occurrence 0 at detection time, so keying on them would discard every call site after the
+    /// first in a file — the occurrence ordinal that disambiguates them is only assigned later, by
+    /// FindingPostProcessor.Relativize.
+    /// </summary>
     private static IReadOnlyList<CryptoFinding> Deduplicate(List<CryptoFinding> findings)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var result = new List<CryptoFinding>(findings.Count);
         foreach (CryptoFinding finding in findings)
         {
-            string key = finding.BomRef
-                ?? $"{finding.RuleId}:{finding.Location.FilePath}:{finding.Location.Line}:{finding.AlgorithmName}";
+            string key =
+                $"{finding.RuleId}|{finding.Location.FilePath}|{finding.Location.Line}|{finding.Location.Column}|{finding.AlgorithmName}";
             if (seen.Add(key))
                 result.Add(finding);
         }
