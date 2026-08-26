@@ -7,11 +7,21 @@ namespace PostQuantum.CryptographicBillOfMaterials.Knowledge;
 /// <summary>
 /// Dependency-free load path for <see cref="KnowledgeBase"/>, backed by <see cref="MiniJson"/> instead of
 /// System.Text.Json. This is the path the Roslyn analyzer uses (the analyzer's dependency closure must stay
-/// limited to the compiler libraries). It produces the same data as <c>LoadDefault</c>.
+/// limited to the compiler libraries). Algorithm data is identical to <c>LoadDefault</c>; playbooks are
+/// loaded shallowly — see <c>ReadPlaybook</c>.
 /// </summary>
 public sealed partial class KnowledgeBase
 {
-    /// <summary>Load the built-in knowledge base using the dependency-free <see cref="MiniJson"/> reader.</summary>
+    /// <summary>
+    /// Load the built-in knowledge base using the dependency-free <see cref="MiniJson"/> reader.
+    /// Algorithm data matches <c>LoadDefault</c> exactly. Playbooks are loaded shallowly:
+    /// <see cref="MigrationPlaybook.Id"/>, <see cref="MigrationPlaybook.Title"/>,
+    /// <see cref="MigrationPlaybook.AppliesTo"/>, <see cref="MigrationPlaybook.Target"/> and
+    /// <see cref="MigrationPlaybook.Steps"/> only — <see cref="MigrationPlaybook.Approaches"/> and
+    /// <see cref="MigrationPlaybook.References"/> are always empty. Use <c>LoadDefault</c> if you need them.
+    /// (These are <c>&lt;c&gt;</c> rather than <c>&lt;see cref&gt;</c> because LoadDefault lives in the
+    /// System.Text.Json partial, which the analyzer's shared-source compilation excludes by design.)
+    /// </summary>
     public static KnowledgeBase LoadPortable()
     {
         var root = ReadEmbeddedObject("algorithms.json");
