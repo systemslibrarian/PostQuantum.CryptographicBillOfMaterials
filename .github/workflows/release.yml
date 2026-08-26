@@ -4,7 +4,10 @@ name: Release
 # certificate is configured as a secret), attaches a tool SBOM, and publishes to NuGet on a tag push.
 on:
   push:
-    tags: ["v*"]
+    # v[0-9]* deliberately: plain "v*" also matches the extension's vscode-v* tags (GitHub's `*` matches any
+    # run of characters except '/'), and ${GITHUB_REF_NAME#v} then yields the un-packable version
+    # "scode-v0.1.0" — turning every VS Code extension release into a red .NET Release run.
+    tags: ["v[0-9]*"]
   workflow_dispatch:
 
 permissions:
@@ -34,20 +37,44 @@ jobs:
 
       - name: Derive version from tag
         id: ver
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+            v="${GITHUB_REF_NAME#v}"
+            if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.+-]*)?$ ]]; then
+              echo "::error::'$GITHUB_REF_NAME' is not a vX.Y.Z release tag"
+              exit 1
+            fi
+            echo "version=$v"             >> "$GITHUB_OUTPUT"
+            echo "packargs=-p:Version=$v" >> "$GITHUB_OUTPUT"
+          else
+            # workflow_dispatch on a branch: emit NO -p:Version at all, so the Directory.Build.props value is
+            # used — which is what docs/RELEASING.md promises. An EMPTY value is not a fallback; it fails
+            # with MSB4044 "GetAssemblyVersion ... required parameter NuGetVersion".
+            echo "Not a tag ref - using the Directory.Build.props version (docs/RELEASING.md)."
+            echo "version="  >> "$GITHUB_OUTPUT"
+            echo "packargs=" >> "$GITHUB_OUTPUT"
+          fi
 
+      # packargs stays UNQUOTED so the dispatch case expands to nothing at all.
       - name: Pack tool
-        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Cli -c Release -o artifacts -p:Version=${{ steps.ver.outputs.version }}
+        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Cli -c Release -o artifacts ${{ steps.ver.outputs.packargs }}
 
       - name: Pack analyzer
-        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Analyzer -c Release -o artifacts -p:Version=${{ steps.ver.outputs.version }}
+        run: dotnet pack src/PostQuantum.CryptographicBillOfMaterials.Analyzer -c Release -o artifacts ${{ steps.ver.outputs.packargs }}
 
       - name: Generate tool SBOM
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           dotnet tool install --global CycloneDX
           export PATH="$PATH:$HOME/.dotnet/tools"
+          # -sv is required: CycloneDX does not read the MSBuild Version property and otherwise stamps
+          # metadata.component.version (and its bom-ref) as "0.0.0" on every release.
+          if [ -z "$VERSION" ]; then
+            VERSION="$(dotnet msbuild src/PostQuantum.CryptographicBillOfMaterials.Cli/PostQuantum.CryptographicBillOfMaterials.Cli.csproj -getProperty:Version -nologo)"
+          fi
           dotnet CycloneDX src/PostQuantum.CryptographicBillOfMaterials.Cli/PostQuantum.CryptographicBillOfMaterials.Cli.csproj \
-            -o artifacts -fn tool.cdx.json -F Json -spv 1.6 -rs -t
+            -o artifacts -fn tool.cdx.json -F Json -spv 1.6 -rs -t -sv "$VERSION"
 
       # Code signing — runs only when the signing secrets are present. NuGet package signing requires a
       # code-signing certificate; supply it as base64 in CODE_SIGNING_PFX_BASE64 + CODE_SIGNING_PFX_PASSWORD.
@@ -66,14 +93,28 @@ jobs:
           done
           rm -f cert.pfx
 
+      # Checksums MUST come after signing: `dotnet nuget sign` rewrites the .nupkg in place, so a pre-sign
+      # hash never matches the published bytes. `rm -f` first so the manifest can never hash itself on a
+      # re-run. Explicit extensions rather than a bare '*', because a subdirectory under artifacts/ would
+      # make `sha256sum *` exit 1 under the runner's `bash -e`.
+      - name: Write checksums
+        working-directory: artifacts
+        run: |
+          rm -f SHA256SUMS.txt
+          sha256sum *.nupkg *.snupkg tool.cdx.json > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       # Trusted publishing: exchange the GitHub OIDC token for a short-lived NuGet API key.
       # No long-lived NUGET_API_KEY secret needed — the trust policy on nuget.org authorizes this repo.
+      # `user:` must be the nuget.org profile name of the POLICY CREATOR, never an organization name.
+      # The vars.NUGET_USER override lets a fork publish under its own account without editing this file;
+      # the literal fallback keeps the canonical repo publishing with zero configuration.
       - name: NuGet login (trusted publishing)
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: NuGet/login@v1
         id: nuget-login
         with:
-          user: systemslibrarian          # nuget.org account that owns the trust policy
+          user: ${{ vars.NUGET_USER || 'systemslibrarian' }}
 
       - name: Publish to NuGet
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -84,3 +125,20 @@ jobs:
         with:
           name: release
           path: artifacts/
+
+      # This is what `permissions: contents: write` above exists for — nothing used it before. README.md
+      # tells users to install the signed package from a GitHub Release and verify it against
+      # SHA256SUMS.txt; neither the Release nor the manifest existed. The `||` upload makes a re-run of a
+      # partially-completed release idempotent.
+      - name: Create GitHub Release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag \
+            artifacts/*.nupkg artifacts/*.snupkg artifacts/tool.cdx.json artifacts/SHA256SUMS.txt \
+          || gh release upload "$GITHUB_REF_NAME" \
+            artifacts/*.nupkg artifacts/*.snupkg artifacts/tool.cdx.json artifacts/SHA256SUMS.txt --clobber
